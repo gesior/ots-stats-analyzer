@@ -26,9 +26,33 @@ The importer optimizes bulk loads:
 
 - Secondary indexes are dropped during import and rebuilt once at the end (much faster inserts).
 - One SQLite transaction per log file, with checkpoints every 32 MiB (resume after interrupt).
-- Description IDs are cached in RAM; new descriptions use a single round-trip when possible.
+- Slow events use multi-row INSERTs (thousands of rows per SQL statement) with cached prepared statements.
+- Description IDs are resolved in bulk per batch (not one DB round-trip per log line).
 
 If you stop import with Ctrl+C, rerun the same command — it continues from the last checkpoint instead of re-reading the whole file.
+
+### Tuning (environment variables)
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `OTS_BATCH_SIZE` | `20000` | Rows buffered in RAM before flush to SQLite |
+| `OTS_INSERT_CHUNK_ROWS` | `250` | Rows per SQL INSERT (keep near 250; very large values slow PHP PDO) |
+| `OTS_READ_MODE` | `stream` | `stream` (line-by-line), `chunk` (64 MiB fread blocks), or `file` (load whole file if ≤ `OTS_MAX_FILE_LOAD_BYTES`) |
+| `OTS_READ_CHUNK_BYTES` | `67108864` | fread block size for `chunk` mode |
+| `OTS_MAX_FILE_LOAD_BYTES` | `67108864` | Max file size for `file` mode |
+| `OTS_MEMORY_LIMIT` | `32G` | PHP `memory_limit` |
+| `OTS_SQLITE_AGGRESSIVE` | off | Set to `1` for larger SQLite cache/mmap and `journal_mode=MEMORY` during import |
+
+Example for a machine with plenty of RAM (full import of large `*_slow.log` files):
+
+```bash
+set OTS_BATCH_SIZE=50000
+set OTS_READ_MODE=chunk
+set OTS_SQLITE_AGGRESSIVE=1
+php bin/import.php import --data-dir=data
+```
+
+Progress reports **lines/s** and **rows inserted** — these are not the same as SQL statements. After tuning, expect roughly **2–4×** higher throughput on slow logs compared to the legacy 150-row inserts (e.g. ~30k → ~60–120k rows/s depending on disk and log content).
 
 ## Import
 

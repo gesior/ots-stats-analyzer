@@ -50,6 +50,13 @@ final class Database
         $this->pdo->exec('PRAGMA cache_size=-262144');
         $this->pdo->exec('PRAGMA temp_store=MEMORY');
         $this->pdo->exec('PRAGMA mmap_size=268435456');
+
+        if (getenv('OTS_SQLITE_AGGRESSIVE') === '1') {
+            $this->pdo->exec('PRAGMA journal_mode=MEMORY');
+            $this->pdo->exec('PRAGMA cache_size=-1048576');
+            $this->pdo->exec('PRAGMA mmap_size=2147483648');
+        }
+
         $this->importSessionActive = true;
     }
 

@@ -33,4 +33,24 @@ final class SlowEventParserTest extends TestCase
         $this->assertSame('savePlayer', $result['description']);
         $this->assertSame('Mohamed', $result['detail']);
     }
+
+    public function testRejectsInvalidLine(): void
+    {
+        $parser = new SlowEventParser();
+
+        $this->assertNull($parser->parseLine('not a log line'));
+        $this->assertNull($parser->parseLine('[1/1/2026 0:00:00] something else'));
+    }
+
+    public function testParseSqlStyleLongDescription(): void
+    {
+        $parser = new SlowEventParser();
+        $query = 'SELECT * FROM players WHERE id = 1';
+        $line = "[1/1/2026 12:00:00] Execution time: 10 ms - {$query} - {$query}";
+        $result = $parser->parseLine($line);
+
+        $this->assertNotNull($result);
+        $this->assertSame($query, $result['description']);
+        $this->assertSame($query, $result['detail']);
+    }
 }

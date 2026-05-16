@@ -11,7 +11,7 @@ final class DedupKey
         string $severity,
         int $occurredAt,
         int $executionMs,
-        int $descriptionId,
+        string $description,
         string $detail,
     ): string {
         return implode("\0", [
@@ -19,7 +19,7 @@ final class DedupKey
             $severity,
             (string) $occurredAt,
             (string) $executionMs,
-            (string) $descriptionId,
+            $description,
             $detail,
         ]);
     }

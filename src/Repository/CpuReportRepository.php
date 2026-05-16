@@ -11,6 +11,7 @@ use PDOStatement;
 final class CpuReportRepository
 {
     private readonly PDOStatement $insertReportStmt;
+    private readonly MultiRowInserter $statsInserter;
 
     public function __construct(
         private readonly PDO $pdo,
@@ -18,6 +19,12 @@ final class CpuReportRepository
         $this->insertReportStmt = $pdo->prepare(
             'INSERT INTO cpu_reports (source, reported_at, thread_id, cpu_usage, idle, other, players_online)
              VALUES (:source, :reported_at, :thread_id, :cpu_usage, :idle, :other, :players_online)',
+        );
+        $this->statsInserter = new MultiRowInserter(
+            $pdo,
+            'cpu_stats',
+            ['report_id', 'description_id', 'time_ms', 'calls', 'rel_usage', 'real_usage'],
+            BatchInsert::maxRowsForColumns($pdo, 6),
         );
     }
 
@@ -84,31 +91,7 @@ final class CpuReportRepository
      */
     public function insertStatsBatch(array $rows): void
     {
-        BatchInsert::chunked($rows, function (array $chunk): void {
-            $this->insertStatsChunk($chunk);
-        });
-    }
-
-    /**
-     * @param list<array{report_id: int, description_id: int, time_ms: int, calls: int, rel_usage: float, real_usage: float}> $rows
-     */
-    private function insertStatsChunk(array $rows): void
-    {
-        $placeholders = [];
-        $params = [];
-        foreach ($rows as $i => $row) {
-            $placeholders[] = "(:report_id{$i}, :description_id{$i}, :time_ms{$i}, :calls{$i}, :rel_usage{$i}, :real_usage{$i})";
-            $params["report_id{$i}"] = $row['report_id'];
-            $params["description_id{$i}"] = $row['description_id'];
-            $params["time_ms{$i}"] = $row['time_ms'];
-            $params["calls{$i}"] = $row['calls'];
-            $params["rel_usage{$i}"] = $row['rel_usage'];
-            $params["real_usage{$i}"] = $row['real_usage'];
-        }
-
-        $sql = 'INSERT INTO cpu_stats (report_id, description_id, time_ms, calls, rel_usage, real_usage) VALUES '
-            . implode(', ', $placeholders);
-        $this->pdo->prepare($sql)->execute($params);
+        $this->statsInserter->insert($rows);
     }
 
     public function countReports(): int

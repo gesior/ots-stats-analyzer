@@ -9,10 +9,10 @@ use OtsStats\Parser\SlowEventParser;
 use OtsStats\Repository\CpuReportRepository;
 use OtsStats\Repository\Database;
 use OtsStats\Repository\DescriptionRepository;
+use OtsStats\Repository\SqliteLimits;
 use OtsStats\Repository\ImportStateRepository;
 use OtsStats\Repository\SlowEventRepository;
 use OtsStats\Util\DedupKey;
-use RuntimeException;
 use Symfony\Component\Console\Output\OutputInterface;
 
 final class ImportOrchestrator
@@ -37,18 +37,28 @@ final class ImportOrchestrator
     private int $dedupCutoff;
     private bool $isIncremental;
     private int $checkpointBytes;
+    private string $readMode;
+    private int $readChunkBytes;
+    private int $maxFileLoadBytes;
 
     public function __construct(
         private readonly Database $database,
         private readonly array $config,
         private readonly string $dataDir,
     ) {
+        if (isset($config['insert_chunk_rows'])) {
+            SqliteLimits::setInsertChunkCap((int) $config['insert_chunk_rows']);
+        }
+
         $pdo = $database->pdo();
         $this->descriptions = new DescriptionRepository($pdo);
         $this->slowEvents = new SlowEventRepository($pdo);
         $this->cpuReports = new CpuReportRepository($pdo);
         $this->importState = new ImportStateRepository($pdo);
         $this->checkpointBytes = (int) ($config['checkpoint_bytes'] ?? 32 * 1024 * 1024);
+        $this->readMode = (string) ($config['read_mode'] ?? 'stream');
+        $this->readChunkBytes = (int) ($config['read_chunk_bytes'] ?? 67_108_864);
+        $this->maxFileLoadBytes = (int) ($config['max_file_load_bytes'] ?? 67_108_864);
     }
 
     public function run(OutputInterface $output, float $progressInterval): int
@@ -142,7 +152,6 @@ final class ImportOrchestrator
         $maxAt = $this->maxSlowAt[$fileKey] ?? null;
         $this->descriptions->preloadSource($source);
         $parser = new SlowEventParser();
-        $handle = $this->openFile($path, $byteOffset);
 
         $reporter->startFile($fileKey, $fileSize, $byteOffset);
         $batch = [];
@@ -154,8 +163,15 @@ final class ImportOrchestrator
         $this->database->beginTransaction();
 
         try {
-            while (($line = fgets($handle)) !== false) {
-                $byteOffset += strlen($line);
+            foreach (LogFileReader::lines(
+                $path,
+                $byteOffset,
+                $this->readMode,
+                $this->readChunkBytes,
+                $this->maxFileLoadBytes,
+            ) as $item) {
+                $line = $item['line'];
+                $byteOffset = $item['byte_offset'];
                 $reporter->tick(strlen($line));
 
                 $parsed = $parser->parseLine($line);
@@ -197,7 +213,7 @@ final class ImportOrchestrator
                 }
 
                 if (count($batch) >= $batchSize) {
-                    $this->slowEvents->insertBatch($batch);
+                    $this->flushSlowBatch($source, $batch);
                     $batch = [];
                 }
 
@@ -213,7 +229,7 @@ final class ImportOrchestrator
             }
 
             if ($batch !== []) {
-                $this->slowEvents->insertBatch($batch);
+                $this->flushSlowBatch($source, $batch);
             }
 
             $this->database->commit();
@@ -221,16 +237,48 @@ final class ImportOrchestrator
         } catch (\Throwable $e) {
             $this->database->rollBack();
             throw $e;
-        } finally {
-            fclose($handle);
         }
 
         $reporter->finishFile();
     }
 
     /**
+     * @param list<array{source: string, severity: string, occurred_at: int, execution_ms: int, description: string, detail: string}> $batch
+     */
+    private function flushSlowBatch(string $source, array $batch): void
+    {
+        if ($batch === []) {
+            return;
+        }
+
+        $uniqueDescriptions = [];
+        foreach ($batch as $row) {
+            $uniqueDescriptions[$row['description']] = true;
+        }
+
+        $descriptionIds = $this->descriptions->resolveMany(
+            $source,
+            array_keys($uniqueDescriptions),
+        );
+
+        $rows = [];
+        foreach ($batch as $row) {
+            $rows[] = [
+                'source' => $row['source'],
+                'severity' => $row['severity'],
+                'occurred_at' => $row['occurred_at'],
+                'execution_ms' => $row['execution_ms'],
+                'description_id' => $descriptionIds[$row['description']],
+                'detail' => $row['detail'],
+            ];
+        }
+
+        $this->slowEvents->insertBatch($rows);
+    }
+
+    /**
      * @param array{occurred_at: int, execution_ms: int, description: string, detail: string} $parsed
-     * @return array{source: string, severity: string, occurred_at: int, execution_ms: int, description_id: int, detail: string}|null
+     * @return array{source: string, severity: string, occurred_at: int, execution_ms: int, description: string, detail: string}|null
      */
     private function buildSlowRow(string $source, string $severity, array $parsed, ?int $maxAt): ?array
     {
@@ -240,15 +288,13 @@ final class ImportOrchestrator
             return null;
         }
 
-        $descriptionId = $this->descriptions->getOrCreate($source, $parsed['description']);
-
         if (!$this->isIncremental) {
             return [
                 'source' => $source,
                 'severity' => $severity,
                 'occurred_at' => $occurredAt,
                 'execution_ms' => $parsed['execution_ms'],
-                'description_id' => $descriptionId,
+                'description' => $parsed['description'],
                 'detail' => $parsed['detail'],
             ];
         }
@@ -258,7 +304,7 @@ final class ImportOrchestrator
             $severity,
             $occurredAt,
             $parsed['execution_ms'],
-            $descriptionId,
+            $parsed['description'],
             $parsed['detail'],
         );
 
@@ -270,7 +316,7 @@ final class ImportOrchestrator
                 'severity' => $severity,
                 'occurred_at' => $occurredAt,
                 'execution_ms' => $parsed['execution_ms'],
-                'description_id' => $descriptionId,
+                'description' => $parsed['description'],
                 'detail' => $parsed['detail'],
             ];
         }
@@ -286,7 +332,7 @@ final class ImportOrchestrator
             'severity' => $severity,
             'occurred_at' => $occurredAt,
             'execution_ms' => $parsed['execution_ms'],
-            'description_id' => $descriptionId,
+            'description' => $parsed['description'],
             'detail' => $parsed['detail'],
         ];
     }
@@ -312,7 +358,6 @@ final class ImportOrchestrator
         $maxAt = $this->maxCpuAt[$source] ?? null;
         $this->descriptions->preloadSource($source);
         $parser = new CpuReportParser();
-        $handle = $this->openFile($path, $byteOffset);
 
         $reporter->startFile($fileKey, $fileSize, $byteOffset);
         $statsBatch = [];
@@ -380,8 +425,15 @@ final class ImportOrchestrator
         $this->database->beginTransaction();
 
         try {
-            while (($line = fgets($handle)) !== false) {
-                $byteOffset += strlen($line);
+            foreach (LogFileReader::lines(
+                $path,
+                $byteOffset,
+                $this->readMode,
+                $this->readChunkBytes,
+                $this->maxFileLoadBytes,
+            ) as $item) {
+                $line = $item['line'];
+                $byteOffset = $item['byte_offset'];
                 $reporter->tick(strlen($line));
                 $processEvents($parser->feedLine($line));
 
@@ -407,8 +459,6 @@ final class ImportOrchestrator
         } catch (\Throwable $e) {
             $this->database->rollBack();
             throw $e;
-        } finally {
-            fclose($handle);
         }
 
         $reporter->finishFile();
@@ -522,20 +572,5 @@ final class ImportOrchestrator
         $offset = (int) $state['byte_offset'];
 
         return $fileSize < $offset ? 0 : $offset;
-    }
-
-    /** @return resource */
-    private function openFile(string $path, int $byteOffset)
-    {
-        $handle = fopen($path, 'rb');
-        if ($handle === false) {
-            throw new RuntimeException("Cannot open: {$path}");
-        }
-
-        if ($byteOffset > 0) {
-            fseek($handle, $byteOffset);
-        }
-
-        return $handle;
     }
 }

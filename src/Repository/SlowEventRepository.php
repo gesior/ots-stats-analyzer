@@ -9,9 +9,17 @@ use PDO;
 
 final class SlowEventRepository
 {
+    private readonly MultiRowInserter $inserter;
+
     public function __construct(
         private readonly PDO $pdo,
     ) {
+        $this->inserter = new MultiRowInserter(
+            $pdo,
+            'slow_events',
+            ['source', 'severity', 'occurred_at', 'execution_ms', 'description_id', 'detail'],
+            BatchInsert::maxRowsForColumns($pdo, 6),
+        );
     }
 
     public function maxOccurredAt(string $source, string $severity): ?int
@@ -28,9 +36,10 @@ final class SlowEventRepository
     public function loadDedupKeysSince(string $source, string $severity, int $sinceTimestamp): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT occurred_at, execution_ms, description_id, detail
-             FROM slow_events
-             WHERE source = :source AND severity = :severity AND occurred_at >= :since',
+            'SELECT se.occurred_at, se.execution_ms, d.description, se.detail
+             FROM slow_events se
+             INNER JOIN descriptions d ON d.id = se.description_id
+             WHERE se.source = :source AND se.severity = :severity AND se.occurred_at >= :since',
         );
         $stmt->execute([
             'source' => $source,
@@ -45,7 +54,7 @@ final class SlowEventRepository
                 $severity,
                 (int) $row['occurred_at'],
                 (int) $row['execution_ms'],
-                (int) $row['description_id'],
+                (string) $row['description'],
                 (string) $row['detail'],
             );
             $keys[$key] = true;
@@ -59,31 +68,7 @@ final class SlowEventRepository
      */
     public function insertBatch(array $rows): void
     {
-        BatchInsert::chunked($rows, function (array $chunk): void {
-            $this->insertChunk($chunk);
-        });
-    }
-
-    /**
-     * @param list<array{source: string, severity: string, occurred_at: int, execution_ms: int, description_id: int, detail: string}> $rows
-     */
-    private function insertChunk(array $rows): void
-    {
-        $placeholders = [];
-        $params = [];
-        foreach ($rows as $i => $row) {
-            $placeholders[] = "(:source{$i}, :severity{$i}, :occurred_at{$i}, :execution_ms{$i}, :description_id{$i}, :detail{$i})";
-            $params["source{$i}"] = $row['source'];
-            $params["severity{$i}"] = $row['severity'];
-            $params["occurred_at{$i}"] = $row['occurred_at'];
-            $params["execution_ms{$i}"] = $row['execution_ms'];
-            $params["description_id{$i}"] = $row['description_id'];
-            $params["detail{$i}"] = $row['detail'];
-        }
-
-        $sql = 'INSERT INTO slow_events (source, severity, occurred_at, execution_ms, description_id, detail) VALUES '
-            . implode(', ', $placeholders);
-        $this->pdo->prepare($sql)->execute($params);
+        $this->inserter->insert($rows);
     }
 
     public function count(): int
