@@ -1,0 +1,11 @@
+[12/3/2026 16:30:56]
+Thread: 1 Cpu usage: 100.028% Idle: 0.225288% Other: -0.253689% Players online: 0
+ Time (ms)     Calls     Rel usage %    Real usage % Description
+     29975         1       99.89057%       99.91895% std::bind(otserv, args, &servicer)
+        32         1        0.10815%        0.10818% std::bind(&LuaInterface::executeTimer, interface, ++interface->m_lastTimer)
+
+[12/3/2026 16:31:26]
+Thread: 1 Cpu usage: 1.49346% Idle: 98.5062% Other: 0.000372053% Players online: 0
+ Time (ms)     Calls     Rel usage %    Real usage % Description
+       211       291       47.14838%        0.70414% std::bind(&Game::checkCreatures, this)
+       152       120       33.94244%        0.50692% std::bind(&Game::checkDecay, this)

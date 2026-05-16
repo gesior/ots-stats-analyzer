@@ -1,0 +1,13 @@
+[12/3/2026 16:30:56]
+ Time (ms)     Calls     Rel usage %    Real usage % Description
+     18483         2       92.95090%       61.61261% data/globalevents/scripts/init.lua:onStartup
+       476         1        2.39404%        1.58689% 	domodlib('zombieEventLib')
+	function onStartup()
+		ZE.cleanupOnStartup()
+		return true
+	end
+	:onStartup
+
+[12/3/2026 16:31:26]
+ Time (ms)     Calls     Rel usage %    Real usage % Description
+        12         4       66.39505%        0.04309% data/globalevents/scripts/custom/attribute_point_effects.lua:onThink

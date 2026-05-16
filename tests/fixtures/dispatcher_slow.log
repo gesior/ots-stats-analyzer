@@ -1,0 +1,3 @@
+[12/3/2026 16:30:56] Execution time: 32 ms - std::bind(&LuaInterface::executeTimer, interface, ++interface->m_lastTimer) - luaAddEvent
+[12/3/2026 16:30:57] Execution time: 19 ms - std::bind(&Game::checkCreatures, this) - start
+[12/3/2026 16:31:6] Execution time: 16 ms - std::bind(&Game::checkDecay, this) - checkDecay
