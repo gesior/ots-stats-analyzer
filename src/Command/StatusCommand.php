@@ -32,6 +32,7 @@ final class StatusCommand extends Command
     {
         $dbPath = $this->resolvePath((string) ($input->getOption('db') ?? $this->config['db_path']));
         $schemaPath = $this->root . '/database/schema.sql';
+        $indexesPath = $this->root . '/database/indexes.sql';
 
         if (!is_file($dbPath)) {
             $output->writeln('<comment>Database not found. Run import first.</comment>');
@@ -39,7 +40,7 @@ final class StatusCommand extends Command
             return Command::SUCCESS;
         }
 
-        $database = new Database($dbPath, $schemaPath);
+        $database = new Database($dbPath, $schemaPath, $indexesPath);
         $pdo = $database->pdo();
         $importState = new ImportStateRepository($pdo);
 

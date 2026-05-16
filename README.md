@@ -20,6 +20,16 @@ Place log files in `data/` (flat layout):
 - `sql.log`, `sql_slow.log`, `sql_very_slow.log`
 - `special.log`, `special_slow.log`, `special_very_slow.log`
 
+## Import performance
+
+The importer optimizes bulk loads:
+
+- Secondary indexes are dropped during import and rebuilt once at the end (much faster inserts).
+- One SQLite transaction per log file, with checkpoints every 32 MiB (resume after interrupt).
+- Description IDs are cached in RAM; new descriptions use a single round-trip when possible.
+
+If you stop import with Ctrl+C, rerun the same command — it continues from the last checkpoint instead of re-reading the whole file.
+
 ## Import
 
 First run (full import, may take a long time for multi-GB logs):

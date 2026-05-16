@@ -36,6 +36,7 @@ final class ImportOrchestrator
 
     private int $dedupCutoff;
     private bool $isIncremental;
+    private int $checkpointBytes;
 
     public function __construct(
         private readonly Database $database,
@@ -47,6 +48,7 @@ final class ImportOrchestrator
         $this->slowEvents = new SlowEventRepository($pdo);
         $this->cpuReports = new CpuReportRepository($pdo);
         $this->importState = new ImportStateRepository($pdo);
+        $this->checkpointBytes = (int) ($config['checkpoint_bytes'] ?? 32 * 1024 * 1024);
     }
 
     public function run(OutputInterface $output, float $progressInterval): int
@@ -76,11 +78,21 @@ final class ImportOrchestrator
         }
         $reporter->setSessionTotalBytes($remainingBytes);
 
-        foreach ($files as $file) {
-            if ($file['type'] === 'cpu') {
-                $this->importCpuFile($file, $batchSize, $reporter);
-            } else {
-                $this->importSlowFile($file, $batchSize, $reporter);
+        if ($remainingBytes > 0) {
+            $this->database->beginImportSession();
+        }
+
+        try {
+            foreach ($files as $file) {
+                if ($file['type'] === 'cpu') {
+                    $this->importCpuFile($file, $batchSize, $reporter);
+                } else {
+                    $this->importSlowFile($file, $batchSize, $reporter);
+                }
+            }
+        } finally {
+            if ($remainingBytes > 0) {
+                $this->database->endImportSession();
             }
         }
 
@@ -90,22 +102,20 @@ final class ImportOrchestrator
     /** @param list<string> $sources */
     private function loadMetadata(array $sources, int $dedupDays): void
     {
+        if (!$this->isIncremental) {
+            return;
+        }
+
         $since = time() - ($dedupDays * 86400);
 
         foreach ($sources as $source) {
             $this->maxCpuAt[$source] = $this->cpuReports->maxReportedAt($source);
-            $this->cpuDedup = array_merge(
-                $this->cpuDedup,
-                $this->cpuReports->loadDedupKeysSince($source, $since),
-            );
+            $this->cpuDedup += $this->cpuReports->loadDedupKeysSince($source, $since);
 
             foreach (['slow', 'very_slow'] as $severity) {
                 $key = "{$source}:{$severity}";
                 $this->maxSlowAt[$key] = $this->slowEvents->maxOccurredAt($source, $severity);
-                $this->slowDedup = array_merge(
-                    $this->slowDedup,
-                    $this->slowEvents->loadDedupKeysSince($source, $severity, $since),
-                );
+                $this->slowDedup += $this->slowEvents->loadDedupKeysSince($source, $severity, $since);
             }
         }
     }
@@ -130,6 +140,7 @@ final class ImportOrchestrator
         }
 
         $maxAt = $this->maxSlowAt[$fileKey] ?? null;
+        $this->descriptions->preloadSource($source);
         $parser = new SlowEventParser();
         $handle = $this->openFile($path, $byteOffset);
 
@@ -138,38 +149,82 @@ final class ImportOrchestrator
         $maxOccurredAt = $state !== null && $state['max_occurred_at'] !== null
             ? (int) $state['max_occurred_at']
             : ($maxAt ?? 0);
+        $checkpointAt = $byteOffset;
 
-        while (($line = fgets($handle)) !== false) {
-            $byteOffset += strlen($line);
-            $reporter->tick(strlen($line));
+        $this->database->beginTransaction();
 
-            $parsed = $parser->parseLine($line);
-            if ($parsed === null) {
-                continue;
+        try {
+            while (($line = fgets($handle)) !== false) {
+                $byteOffset += strlen($line);
+                $reporter->tick(strlen($line));
+
+                $parsed = $parser->parseLine($line);
+                if ($parsed === null) {
+                    $checkpointAt = $this->maybeCheckpoint(
+                        $fileKey,
+                        $path,
+                        $fileSize,
+                        $fileMtime,
+                        $byteOffset,
+                        $checkpointAt,
+                        $maxOccurredAt,
+                    );
+
+                    continue;
+                }
+
+                $row = $this->buildSlowRow($source, $severity, $parsed, $maxAt);
+                if ($row === null) {
+                    $reporter->recordSkipped();
+                    $checkpointAt = $this->maybeCheckpoint(
+                        $fileKey,
+                        $path,
+                        $fileSize,
+                        $fileMtime,
+                        $byteOffset,
+                        $checkpointAt,
+                        $maxOccurredAt,
+                    );
+
+                    continue;
+                }
+
+                $batch[] = $row;
+                $reporter->recordInserted();
+
+                if ($row['occurred_at'] > $maxOccurredAt) {
+                    $maxOccurredAt = $row['occurred_at'];
+                }
+
+                if (count($batch) >= $batchSize) {
+                    $this->slowEvents->insertBatch($batch);
+                    $batch = [];
+                }
+
+                $checkpointAt = $this->maybeCheckpoint(
+                    $fileKey,
+                    $path,
+                    $fileSize,
+                    $fileMtime,
+                    $byteOffset,
+                    $checkpointAt,
+                    $maxOccurredAt,
+                );
             }
 
-            $row = $this->buildSlowRow($source, $severity, $parsed, $maxAt);
-            if ($row === null) {
-                $reporter->recordSkipped();
-                continue;
+            if ($batch !== []) {
+                $this->slowEvents->insertBatch($batch);
             }
 
-            $batch[] = $row;
-            $reporter->recordInserted();
-
-            if ($row['occurred_at'] > $maxOccurredAt) {
-                $maxOccurredAt = $row['occurred_at'];
-            }
-
-            if (count($batch) >= $batchSize) {
-                $this->flushSlowBatch($batch);
-            }
+            $this->database->commit();
+            $this->importState->save($fileKey, $path, $fileSize, $fileMtime, $byteOffset, $maxOccurredAt);
+        } catch (\Throwable $e) {
+            $this->database->rollBack();
+            throw $e;
+        } finally {
+            fclose($handle);
         }
 
-        fclose($handle);
-        $this->flushSlowBatch($batch);
-
-        $this->importState->save($fileKey, $path, $fileSize, $fileMtime, $byteOffset, $maxOccurredAt);
         $reporter->finishFile();
     }
 
@@ -186,6 +241,18 @@ final class ImportOrchestrator
         }
 
         $descriptionId = $this->descriptions->getOrCreate($source, $parsed['description']);
+
+        if (!$this->isIncremental) {
+            return [
+                'source' => $source,
+                'severity' => $severity,
+                'occurred_at' => $occurredAt,
+                'execution_ms' => $parsed['execution_ms'],
+                'description_id' => $descriptionId,
+                'detail' => $parsed['detail'],
+            ];
+        }
+
         $dedupKey = DedupKey::slow(
             $source,
             $severity,
@@ -224,19 +291,6 @@ final class ImportOrchestrator
         ];
     }
 
-    /** @param list<array<string, mixed>> $batch */
-    private function flushSlowBatch(array &$batch): void
-    {
-        if ($batch === []) {
-            return;
-        }
-
-        $this->database->beginTransaction();
-        $this->slowEvents->insertBatch($batch);
-        $this->database->commit();
-        $batch = [];
-    }
-
     /** @param array{file_key: string, source: string, type: string, path: string, severity: ?string} $file */
     private function importCpuFile(array $file, int $batchSize, ImportProgressReporter $reporter): void
     {
@@ -256,6 +310,7 @@ final class ImportOrchestrator
         }
 
         $maxAt = $this->maxCpuAt[$source] ?? null;
+        $this->descriptions->preloadSource($source);
         $parser = new CpuReportParser();
         $handle = $this->openFile($path, $byteOffset);
 
@@ -264,6 +319,7 @@ final class ImportOrchestrator
         $maxReportedAt = $state !== null && $state['max_occurred_at'] !== null
             ? (int) $state['max_occurred_at']
             : ($maxAt ?? 0);
+        $checkpointAt = $byteOffset;
 
         $currentReportId = null;
         $pendingReportMeta = null;
@@ -315,23 +371,67 @@ final class ImportOrchestrator
                 }
 
                 if (count($statsBatch) >= $batchSize) {
-                    $this->flushCpuBatch($statsBatch);
+                    $this->cpuReports->insertStatsBatch($statsBatch);
+                    $statsBatch = [];
                 }
             }
         };
 
-        while (($line = fgets($handle)) !== false) {
-            $byteOffset += strlen($line);
-            $reporter->tick(strlen($line));
-            $processEvents($parser->feedLine($line));
+        $this->database->beginTransaction();
+
+        try {
+            while (($line = fgets($handle)) !== false) {
+                $byteOffset += strlen($line);
+                $reporter->tick(strlen($line));
+                $processEvents($parser->feedLine($line));
+
+                $checkpointAt = $this->maybeCheckpoint(
+                    $fileKey,
+                    $path,
+                    $fileSize,
+                    $fileMtime,
+                    $byteOffset,
+                    $checkpointAt,
+                    $maxReportedAt,
+                );
+            }
+
+            $processEvents($parser->finish());
+
+            if ($statsBatch !== []) {
+                $this->cpuReports->insertStatsBatch($statsBatch);
+            }
+
+            $this->database->commit();
+            $this->importState->save($fileKey, $path, $fileSize, $fileMtime, $byteOffset, $maxReportedAt);
+        } catch (\Throwable $e) {
+            $this->database->rollBack();
+            throw $e;
+        } finally {
+            fclose($handle);
         }
 
-        $processEvents($parser->finish());
-        fclose($handle);
-        $this->flushCpuBatch($statsBatch);
-
-        $this->importState->save($fileKey, $path, $fileSize, $fileMtime, $byteOffset, $maxReportedAt);
         $reporter->finishFile();
+    }
+
+    private function maybeCheckpoint(
+        string $fileKey,
+        string $path,
+        int $fileSize,
+        int $fileMtime,
+        int $byteOffset,
+        int $checkpointAt,
+        int $maxTimestamp,
+    ): int {
+        if ($byteOffset - $checkpointAt < $this->checkpointBytes) {
+            return $checkpointAt;
+        }
+
+        $this->database->commit();
+        $this->importState->save($fileKey, $path, $fileSize, $fileMtime, $byteOffset, $maxTimestamp);
+        $this->database->beginTransaction();
+
+        return $byteOffset;
     }
 
     /** @param array<string, mixed> $meta */
@@ -361,6 +461,18 @@ final class ImportOrchestrator
         }
 
         $descriptionId = $this->descriptions->getOrCreate($source, (string) $event['description']);
+
+        if (!$this->isIncremental) {
+            return [
+                'report_id' => $reportId,
+                'description_id' => $descriptionId,
+                'time_ms' => (int) $event['time_ms'],
+                'calls' => (int) $event['calls'],
+                'rel_usage' => (float) $event['rel_usage'],
+                'real_usage' => (float) $event['real_usage'],
+            ];
+        }
+
         $dedupKey = DedupKey::cpuStat(
             $source,
             $reportedAt,
@@ -398,19 +510,6 @@ final class ImportOrchestrator
             'rel_usage' => (float) $event['rel_usage'],
             'real_usage' => (float) $event['real_usage'],
         ];
-    }
-
-    /** @param list<array<string, mixed>> $batch */
-    private function flushCpuBatch(array &$batch): void
-    {
-        if ($batch === []) {
-            return;
-        }
-
-        $this->database->beginTransaction();
-        $this->cpuReports->insertStatsBatch($batch);
-        $this->database->commit();
-        $batch = [];
     }
 
     /** @param array<string, mixed>|null $state */

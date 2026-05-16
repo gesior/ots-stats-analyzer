@@ -40,7 +40,7 @@ final class ImportIntegrationTest extends TestCase
         $config['batch_size'] = 100;
 
         $dbPath = $this->tmpDir . '/var/test.sqlite';
-        $database = new Database($dbPath, $root . '/database/schema.sql');
+        $database = new Database($dbPath, $root . '/database/schema.sql', $root . '/database/indexes.sql');
 
         $orchestrator = new ImportOrchestrator(
             $database,

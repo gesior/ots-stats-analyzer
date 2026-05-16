@@ -59,10 +59,16 @@ final class SlowEventRepository
      */
     public function insertBatch(array $rows): void
     {
-        if ($rows === []) {
-            return;
-        }
+        BatchInsert::chunked($rows, function (array $chunk): void {
+            $this->insertChunk($chunk);
+        });
+    }
 
+    /**
+     * @param list<array{source: string, severity: string, occurred_at: int, execution_ms: int, description_id: int, detail: string}> $rows
+     */
+    private function insertChunk(array $rows): void
+    {
         $placeholders = [];
         $params = [];
         foreach ($rows as $i => $row) {

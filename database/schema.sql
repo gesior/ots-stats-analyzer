@@ -16,8 +16,6 @@ CREATE TABLE IF NOT EXISTS cpu_reports (
     players_online INTEGER
 );
 
-CREATE INDEX IF NOT EXISTS idx_cpu_reports_source_time ON cpu_reports(source, reported_at);
-
 CREATE TABLE IF NOT EXISTS cpu_stats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     report_id INTEGER NOT NULL REFERENCES cpu_reports(id),
@@ -28,9 +26,6 @@ CREATE TABLE IF NOT EXISTS cpu_stats (
     real_usage REAL NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_cpu_stats_desc_time ON cpu_stats(description_id, report_id);
-CREATE INDEX IF NOT EXISTS idx_cpu_stats_real_usage ON cpu_stats(real_usage);
-
 CREATE TABLE IF NOT EXISTS slow_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source TEXT NOT NULL,
@@ -40,9 +35,6 @@ CREATE TABLE IF NOT EXISTS slow_events (
     description_id INTEGER NOT NULL REFERENCES descriptions(id),
     detail TEXT NOT NULL DEFAULT ''
 );
-
-CREATE INDEX IF NOT EXISTS idx_slow_events_source_time ON slow_events(source, severity, occurred_at);
-CREATE INDEX IF NOT EXISTS idx_slow_events_desc ON slow_events(description_id);
 
 CREATE TABLE IF NOT EXISTS import_files (
     file_key TEXT PRIMARY KEY,

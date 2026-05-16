@@ -6,12 +6,19 @@ namespace OtsStats\Repository;
 
 use OtsStats\Util\DedupKey;
 use PDO;
+use PDOStatement;
 
 final class CpuReportRepository
 {
+    private readonly PDOStatement $insertReportStmt;
+
     public function __construct(
         private readonly PDO $pdo,
     ) {
+        $this->insertReportStmt = $pdo->prepare(
+            'INSERT INTO cpu_reports (source, reported_at, thread_id, cpu_usage, idle, other, players_online)
+             VALUES (:source, :reported_at, :thread_id, :cpu_usage, :idle, :other, :players_online)',
+        );
     }
 
     public function maxReportedAt(string $source): ?int
@@ -59,11 +66,7 @@ final class CpuReportRepository
         ?float $other,
         ?int $playersOnline,
     ): int {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO cpu_reports (source, reported_at, thread_id, cpu_usage, idle, other, players_online)
-             VALUES (:source, :reported_at, :thread_id, :cpu_usage, :idle, :other, :players_online)',
-        );
-        $stmt->execute([
+        $this->insertReportStmt->execute([
             'source' => $source,
             'reported_at' => $reportedAt,
             'thread_id' => $threadId,
@@ -81,10 +84,16 @@ final class CpuReportRepository
      */
     public function insertStatsBatch(array $rows): void
     {
-        if ($rows === []) {
-            return;
-        }
+        BatchInsert::chunked($rows, function (array $chunk): void {
+            $this->insertStatsChunk($chunk);
+        });
+    }
 
+    /**
+     * @param list<array{report_id: int, description_id: int, time_ms: int, calls: int, rel_usage: float, real_usage: float}> $rows
+     */
+    private function insertStatsChunk(array $rows): void
+    {
         $placeholders = [];
         $params = [];
         foreach ($rows as $i => $row) {

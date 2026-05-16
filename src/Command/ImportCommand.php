@@ -40,6 +40,7 @@ final class ImportCommand extends Command
         $dataDir = $this->resolvePath((string) ($input->getOption('data-dir') ?? $this->config['data_dir']));
         $dbPath = $this->resolvePath((string) ($input->getOption('db') ?? $this->config['db_path']));
         $schemaPath = $this->root . '/database/schema.sql';
+        $indexesPath = $this->root . '/database/indexes.sql';
 
         $config = $this->config;
         if ($input->getOption('dedup-days') !== null) {
@@ -50,7 +51,7 @@ final class ImportCommand extends Command
             ? (float) $input->getOption('progress-interval')
             : (float) $this->config['progress_interval_seconds'];
 
-        $database = new Database($dbPath, $schemaPath);
+        $database = new Database($dbPath, $schemaPath, $indexesPath);
         $orchestrator = new ImportOrchestrator($database, $config, $dataDir);
 
         return $orchestrator->run($output->getErrorOutput(), $progressInterval);
