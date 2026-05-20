@@ -101,6 +101,84 @@ final class ImportIntegrationTest extends TestCase
         $this->assertEqualsWithDelta($rawAvg, $aggAvg, 0.001);
     }
 
+    public function testImportPopulatesSourceUsageAgg(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $config = require $root . '/config/import.php';
+        $config['dedup_days'] = 7;
+        $config['batch_size'] = 100;
+
+        $dbPath = $this->tmpDir . '/var/test.sqlite';
+        $database = new Database($dbPath, $root . '/database/schema.sql', $root . '/database/indexes.sql');
+
+        $orchestrator = new ImportOrchestrator(
+            $database,
+            $config,
+            $this->tmpDir . '/data',
+        );
+
+        $orchestrator->run(new NullOutput(), 0);
+
+        $pdo = $database->pdo();
+
+        $aggCount = (int) $pdo->query(
+            "SELECT COUNT(*) FROM cpu_source_usage_agg WHERE source = 'lua'",
+        )->fetchColumn();
+        $this->assertGreaterThan(0, $aggCount);
+
+        $rawSum = (float) $pdo->query(
+            'SELECT SUM(s.real_usage)
+             FROM cpu_stats s
+             INNER JOIN cpu_reports r ON r.id = s.report_id
+             WHERE r.source = \'lua\'',
+        )->fetchColumn();
+
+        $aggSum = (float) $pdo->query(
+            "SELECT SUM(total_real_usage) FROM cpu_source_usage_agg WHERE source = 'lua'",
+        )->fetchColumn();
+
+        $this->assertEqualsWithDelta($rawSum, $aggSum, 0.001);
+    }
+
+    public function testImportPopulatesFunctionBucketAgg(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $config = require $root . '/config/import.php';
+        $config['dedup_days'] = 7;
+        $config['batch_size'] = 100;
+
+        $dbPath = $this->tmpDir . '/var/test.sqlite';
+        $database = new Database($dbPath, $root . '/database/schema.sql', $root . '/database/indexes.sql');
+
+        $orchestrator = new ImportOrchestrator(
+            $database,
+            $config,
+            $this->tmpDir . '/data',
+        );
+
+        $orchestrator->run(new NullOutput(), 0);
+
+        $pdo = $database->pdo();
+
+        $aggCount = (int) $pdo->query(
+            "SELECT COUNT(*) FROM cpu_function_bucket_agg WHERE source = 'dispatcher'",
+        )->fetchColumn();
+        $this->assertGreaterThan(0, $aggCount);
+
+        $rawMax = (float) $pdo->query(
+            'SELECT MAX(s.real_usage)
+             FROM cpu_stats s
+             INNER JOIN cpu_reports r ON r.id = s.report_id
+             WHERE r.source = \'dispatcher\'',
+        )->fetchColumn();
+
+        $aggMax = (float) $pdo->query(
+            "SELECT MAX(max_real_usage) FROM cpu_function_bucket_agg WHERE source = 'dispatcher'",
+        )->fetchColumn();
+
+        $this->assertEqualsWithDelta($rawMax, $aggMax, 0.001);
+    }
+
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {

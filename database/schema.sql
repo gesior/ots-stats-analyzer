@@ -45,6 +45,26 @@ CREATE TABLE IF NOT EXISTS cpu_overview_agg (
     PRIMARY KEY(source, bucket_time)
 );
 
+CREATE TABLE IF NOT EXISTS cpu_source_usage_agg (
+    source TEXT NOT NULL,
+    bucket_time INTEGER NOT NULL,
+    total_real_usage REAL NOT NULL,
+    sample_count INTEGER NOT NULL,
+    PRIMARY KEY(source, bucket_time)
+);
+
+CREATE TABLE IF NOT EXISTS cpu_function_bucket_agg (
+    source TEXT NOT NULL,
+    bucket_time INTEGER NOT NULL,
+    description_id INTEGER NOT NULL,
+    max_real_usage REAL NOT NULL,
+    sum_real_usage REAL NOT NULL,
+    sum_time_ms INTEGER NOT NULL,
+    sum_calls INTEGER NOT NULL,
+    sample_count INTEGER NOT NULL,
+    PRIMARY KEY(source, bucket_time, description_id)
+);
+
 CREATE TABLE IF NOT EXISTS import_files (
     file_key TEXT PRIMARY KEY,
     path TEXT NOT NULL,

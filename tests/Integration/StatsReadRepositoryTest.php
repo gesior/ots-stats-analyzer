@@ -108,6 +108,21 @@ final class StatsReadRepositoryTest extends TestCase
         $this->assertArrayNotHasKey('cpu_usage', $first);
     }
 
+    public function testTopFunctionsReturnsSortedLuaEntries(): void
+    {
+        $result = $this->repository->topFunctions('lua', $this->latestEnd, 'day', 'max', 10);
+
+        $this->assertNotEmpty($result['functions']);
+        $this->assertLessThanOrEqual(10, count($result['functions']));
+
+        for ($i = 1, $n = count($result['functions']); $i < $n; ++$i) {
+            $this->assertGreaterThanOrEqual(
+                $result['functions'][$i]['max_real_usage'],
+                $result['functions'][$i - 1]['max_real_usage'],
+            );
+        }
+    }
+
     public function testTopFunctionsReturnsSortedDispatcherEntries(): void
     {
         $result = $this->repository->topFunctions('dispatcher', $this->latestEnd, 'day', 'max', 10);

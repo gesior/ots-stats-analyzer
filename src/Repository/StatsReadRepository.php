@@ -94,6 +94,10 @@ final class StatsReadRepository
             default => 'max_real_usage',
         };
 
+        if ($this->hasFunctionBucketAgg($source)) {
+            return $this->topFunctionsFromAgg($source, $window, $range, $sort, $limit, $orderColumn);
+        }
+
         $sql = <<<SQL
             SELECT s.description_id,
                    d.description,
@@ -268,6 +272,10 @@ final class StatsReadRepository
      */
     private function fetchSourceUsageOverview(string $source, int $start, int $end, int $bucket): array
     {
+        if ($this->hasSourceUsageAgg($source)) {
+            return $this->fetchSourceUsageOverviewFromAgg($source, $start, $end, $bucket);
+        }
+
         $sql = <<<SQL
             SELECT (r.reported_at / :bucket) * :bucket AS t,
                    SUM(s.real_usage) AS real_usage
@@ -296,6 +304,118 @@ final class StatsReadRepository
         }
 
         return $points;
+    }
+
+    /**
+     * @return list<array{t: int, real_usage: ?float}>
+     */
+    private function fetchSourceUsageOverviewFromAgg(string $source, int $start, int $end, int $bucket): array
+    {
+        $sql = <<<SQL
+            SELECT (bucket_time / :bucket) * :bucket AS t,
+                   SUM(total_real_usage) AS real_usage
+            FROM cpu_source_usage_agg
+            WHERE source = :source
+              AND bucket_time > :start
+              AND bucket_time <= :end
+            GROUP BY t
+            ORDER BY t
+        SQL;
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->bindValue(':bucket', $bucket, PDO::PARAM_INT);
+        $stmt->bindValue(':source', $source);
+        $stmt->bindValue(':start', $start, PDO::PARAM_INT);
+        $stmt->bindValue(':end', $end, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $points = [];
+        while ($row = $stmt->fetch()) {
+            $points[] = [
+                't' => (int) $row['t'],
+                'real_usage' => $row['real_usage'] !== null ? (float) $row['real_usage'] : null,
+            ];
+        }
+
+        return $points;
+    }
+
+    /**
+     * @param array{start: int, end: int} $window
+     * @return array<string, mixed>
+     */
+    private function topFunctionsFromAgg(
+        string $source,
+        array $window,
+        string $range,
+        string $sort,
+        int $limit,
+        string $orderColumn,
+    ): array {
+        $sql = <<<SQL
+            SELECT a.description_id,
+                   d.description,
+                   MAX(a.max_real_usage) AS max_real_usage,
+                   SUM(a.sum_real_usage) / SUM(a.sample_count) AS avg_real_usage,
+                   SUM(a.sum_time_ms) AS total_time_ms,
+                   SUM(a.sum_calls) AS total_calls
+            FROM cpu_function_bucket_agg a
+            INNER JOIN descriptions d ON d.id = a.description_id
+            WHERE a.source = :source
+              AND a.bucket_time > :start
+              AND a.bucket_time <= :end
+            GROUP BY a.description_id
+            ORDER BY {$orderColumn} DESC
+            LIMIT :limit
+        SQL;
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->bindValue(':source', $source);
+        $stmt->bindValue(':start', $window['start'], PDO::PARAM_INT);
+        $stmt->bindValue(':end', $window['end'], PDO::PARAM_INT);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $functions = [];
+        while ($row = $stmt->fetch()) {
+            $functions[] = [
+                'description_id' => (int) $row['description_id'],
+                'description' => (string) $row['description'],
+                'max_real_usage' => (float) $row['max_real_usage'],
+                'avg_real_usage' => (float) $row['avg_real_usage'],
+                'total_time_ms' => (int) $row['total_time_ms'],
+                'total_calls' => (int) $row['total_calls'],
+            ];
+        }
+
+        return [
+            'source' => $source,
+            'range' => $range,
+            'start' => $window['start'],
+            'end' => $window['end'],
+            'sort' => $sort,
+            'functions' => $functions,
+        ];
+    }
+
+    private function hasSourceUsageAgg(string $source): bool
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT COUNT(*) FROM cpu_source_usage_agg WHERE source = :source LIMIT 1',
+        );
+        $stmt->execute(['source' => $source]);
+
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
+    private function hasFunctionBucketAgg(string $source): bool
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT COUNT(*) FROM cpu_function_bucket_agg WHERE source = :source LIMIT 1',
+        );
+        $stmt->execute(['source' => $source]);
+
+        return (int) $stmt->fetchColumn() > 0;
     }
 
     /**

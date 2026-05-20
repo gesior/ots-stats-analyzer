@@ -9,6 +9,8 @@ use RuntimeException;
 
 final class Database
 {
+    private const FUNCTION_BUCKET_SECONDS = 3600;
+
     private PDO $pdo;
     private bool $importSessionActive = false;
 
@@ -80,8 +82,25 @@ final class Database
         $this->rebuildOverviewAgg();
         $this->reportProgress(
             $onProgress,
-            sprintf('  Aggregation done in %s.', self::formatDuration(microtime(true) - $started)),
+            sprintf('  Overview aggregation done in %s.', self::formatDuration(microtime(true) - $started)),
         );
+
+        $this->reportProgress($onProgress, 'Rebuilding source usage aggregation...');
+        $started = microtime(true);
+        $this->rebuildSourceUsageAgg();
+        $this->reportProgress(
+            $onProgress,
+            sprintf('  Source usage aggregation done in %s.', self::formatDuration(microtime(true) - $started)),
+        );
+
+        $this->reportProgress($onProgress, 'Rebuilding function bucket aggregation...');
+        $started = microtime(true);
+        $this->rebuildFunctionBucketAgg();
+        $this->reportProgress(
+            $onProgress,
+            sprintf('  Function bucket aggregation done in %s.', self::formatDuration(microtime(true) - $started)),
+        );
+
         $this->applySecondaryIndexes($onProgress);
     }
 
@@ -118,6 +137,44 @@ final class Database
                     COUNT(*)
              FROM cpu_reports
              GROUP BY source, bucket_time',
+        );
+    }
+
+    private function rebuildSourceUsageAgg(): void
+    {
+        $this->pdo->exec('DELETE FROM cpu_source_usage_agg');
+        $this->pdo->exec(
+            'INSERT INTO cpu_source_usage_agg (source, bucket_time, total_real_usage, sample_count)
+             SELECT r.source,
+                    (r.reported_at / 30) * 30 AS bucket_time,
+                    SUM(s.real_usage),
+                    COUNT(*)
+             FROM cpu_stats s
+             INNER JOIN cpu_reports r ON r.id = s.report_id
+             GROUP BY r.source, bucket_time',
+        );
+    }
+
+    private function rebuildFunctionBucketAgg(): void
+    {
+        $bucket = self::FUNCTION_BUCKET_SECONDS;
+        $this->pdo->exec('DELETE FROM cpu_function_bucket_agg');
+        $this->pdo->exec(
+            "INSERT INTO cpu_function_bucket_agg (
+                 source, bucket_time, description_id,
+                 max_real_usage, sum_real_usage, sum_time_ms, sum_calls, sample_count
+             )
+             SELECT r.source,
+                    (r.reported_at / {$bucket}) * {$bucket} AS bucket_time,
+                    s.description_id,
+                    MAX(s.real_usage),
+                    SUM(s.real_usage),
+                    SUM(s.time_ms),
+                    SUM(s.calls),
+                    COUNT(*)
+             FROM cpu_stats s
+             INNER JOIN cpu_reports r ON r.id = s.report_id
+             GROUP BY r.source, bucket_time, s.description_id",
         );
     }
 
