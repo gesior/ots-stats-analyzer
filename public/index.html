@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,32 +11,32 @@
 <body>
     <header class="header">
         <h1>OTS Stats Analyzer</h1>
-        <p class="subtitle">Przegląd statystyk CPU i graczy online</p>
+        <p class="subtitle">Overview of CPU statistics and online players</p>
     </header>
 
     <main class="container">
         <section class="controls">
-            <nav class="tabs" id="source-tabs" aria-label="Źródło danych"></nav>
+            <nav class="tabs" id="source-tabs" aria-label="Data source"></nav>
 
             <div class="controls-row">
-                <div class="range-buttons" role="group" aria-label="Zakres czasu">
+                <div class="range-buttons" role="group" aria-label="Time range">
                     <button type="button" data-range="hour">1h</button>
                     <button type="button" data-range="day" class="active">24h</button>
                     <button type="button" data-range="7d">7d</button>
                 </div>
 
                 <div class="time-nav">
-                    <button type="button" id="time-prev" title="Wcześniej">◀</button>
+                    <button type="button" id="time-prev" title="Earlier">◀</button>
                     <label>
-                        Koniec zakresu
+                        End of range
                         <input type="datetime-local" id="end-time" step="1">
                     </label>
-                    <button type="button" id="time-next" title="Później">▶</button>
+                    <button type="button" id="time-next" title="Later">▶</button>
                 </div>
 
                 <div class="sort-controls">
                     <label>
-                        Sortowanie funkcji
+                        Function sorting
                         <select id="sort-select">
                             <option value="max">Max CPU %</option>
                             <option value="avg">Avg CPU %</option>
@@ -47,25 +47,25 @@
             </div>
         </section>
 
-        <div class="loading hidden" id="loading">Ładowanie danych…</div>
+        <div class="loading hidden" id="loading">Loading data...</div>
         <div class="error hidden" id="error"></div>
 
         <section class="dashboard">
             <div class="chart-panel">
-                <h2 id="overview-title">CPU i gracze online</h2>
+                <h2 id="overview-title">CPU and online players</h2>
                 <div class="chart-wrap">
                     <canvas id="overview-chart"></canvas>
                 </div>
             </div>
 
             <aside class="functions-panel">
-                <h2>Top funkcje</h2>
+                <h2>Top functions</h2>
                 <ol class="function-list" id="function-list"></ol>
             </aside>
         </section>
 
         <section class="function-chart-section hidden" id="function-section">
-            <h2 id="function-title">Wykres funkcji</h2>
+            <h2 id="function-title">Function chart</h2>
             <div class="chart-wrap">
                 <canvas id="function-chart"></canvas>
             </div>

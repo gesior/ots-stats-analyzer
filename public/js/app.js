@@ -167,7 +167,7 @@
             if (token !== state.loadToken) {
                 return;
             }
-            setError(err.message || 'Nie udało się załadować danych.');
+            setError(err.message || 'Failed to load data.');
         } finally {
             if (token === state.loadToken) {
                 setLoading(false);
@@ -197,7 +197,7 @@
             if (token !== state.loadToken) {
                 return;
             }
-            setError(err.message || 'Nie udało się załadować listy funkcji.');
+            setError(err.message || 'Failed to load function list.');
         } finally {
             if (token === state.loadToken) {
                 setLoading(false);
@@ -234,7 +234,7 @@
     function renderOverview(data) {
         const isDispatcher = data.source === 'dispatcher';
         els.overviewTitle.textContent = isDispatcher
-            ? 'CPU i gracze online (dispatcher)'
+            ? 'CPU and online players (dispatcher)'
             : `CPU usage (${data.source})`;
 
         const labels = data.points.map((p) => formatLabel(p.t));
@@ -256,7 +256,7 @@
 
         if (isDispatcher) {
             datasets.push({
-                label: 'Gracze online',
+                label: 'Online players',
                 data: data.points.map((p) => p.players_online),
                 borderColor: '#ff9f43',
                 backgroundColor: 'rgba(255, 159, 67, 0.12)',
@@ -287,7 +287,7 @@
             scales.players = {
                 type: 'linear',
                 position: 'right',
-                title: { display: true, text: 'Gracze online', color: '#8b9cb3' },
+                title: { display: true, text: 'Online players', color: '#8b9cb3' },
                 ticks: { color: '#8b9cb3' },
                 grid: { drawOnChartArea: false },
             };
@@ -306,7 +306,7 @@
 
         if (functions.length === 0) {
             const li = document.createElement('li');
-            li.textContent = 'Brak danych w wybranym zakresie.';
+            li.textContent = 'No data in selected range.';
             li.style.padding = '0.75rem 0.35rem';
             li.style.color = '#8b9cb3';
             els.functionList.appendChild(li);
@@ -330,7 +330,7 @@
                     await loadFunctionSeries(token);
                     els.functionSection.classList.remove('hidden');
                 } catch (err) {
-                    setError(err.message || 'Nie udało się załadować wykresu funkcji.');
+                    setError(err.message || 'Failed to load function chart.');
                 } finally {
                     if (token === state.loadToken) {
                         setLoading(false);
@@ -377,7 +377,7 @@
 
         if (hasPlayers) {
             datasets.push({
-                label: 'Gracze online',
+                label: 'Online players',
                 data: data.points.map((p) => p.players_online),
                 borderColor: '#ff9f43',
                 backgroundColor: 'rgba(255, 159, 67, 0.12)',
@@ -389,7 +389,7 @@
             scales.players = {
                 type: 'linear',
                 position: 'right',
-                title: { display: true, text: 'Gracze online', color: '#8b9cb3' },
+                title: { display: true, text: 'Online players', color: '#8b9cb3' },
                 ticks: { color: '#8b9cb3' },
                 grid: { drawOnChartArea: false },
             };
