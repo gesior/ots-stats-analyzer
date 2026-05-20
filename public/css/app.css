@@ -1,0 +1,239 @@
+:root {
+    color-scheme: dark;
+    --bg: #0f1419;
+    --surface: #1a2332;
+    --border: #2d3a4f;
+    --text: #e7ecf3;
+    --muted: #8b9cb3;
+    --accent: #4da3ff;
+    --accent-hover: #7bb8ff;
+    --cpu: #4da3ff;
+    --players: #ff9f43;
+    --danger: #ff6b6b;
+    --active: #243044;
+    font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+}
+
+.header {
+    padding: 1.25rem 1.5rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.subtitle {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 1rem 1.5rem 2rem;
+}
+
+.controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.tabs button,
+.range-buttons button,
+.time-nav button {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.45rem 0.85rem;
+    cursor: pointer;
+    font: inherit;
+}
+
+.tabs button:hover,
+.range-buttons button:hover,
+.time-nav button:hover {
+    border-color: var(--accent);
+}
+
+.tabs button.active,
+.range-buttons button.active {
+    background: var(--active);
+    border-color: var(--accent);
+    color: var(--accent-hover);
+}
+
+.controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: end;
+}
+
+.range-buttons {
+    display: flex;
+    gap: 0.35rem;
+}
+
+.time-nav {
+    display: flex;
+    align-items: end;
+    gap: 0.5rem;
+}
+
+.time-nav label,
+.sort-controls label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+input[type="datetime-local"],
+select {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    font: inherit;
+}
+
+.loading,
+.error {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+
+.loading {
+    background: var(--surface);
+    color: var(--muted);
+}
+
+.error {
+    background: rgba(255, 107, 107, 0.12);
+    color: var(--danger);
+    border: 1px solid rgba(255, 107, 107, 0.35);
+}
+
+.hidden {
+    display: none !important;
+}
+
+.dashboard {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 1rem;
+    align-items: start;
+}
+
+.chart-panel,
+.functions-panel,
+.function-chart-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem;
+}
+
+.chart-panel h2,
+.functions-panel h2,
+.function-chart-section h2 {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.chart-wrap {
+    position: relative;
+    height: 360px;
+}
+
+.function-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.function-list li {
+    margin: 0;
+}
+
+.function-list button {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.65rem 0.35rem;
+    cursor: pointer;
+    font: inherit;
+}
+
+.function-list button:hover {
+    background: rgba(77, 163, 255, 0.08);
+}
+
+.function-list button.active {
+    background: rgba(77, 163, 255, 0.15);
+    border-left: 3px solid var(--accent);
+    padding-left: calc(0.35rem - 3px);
+}
+
+.fn-name {
+    display: block;
+    font-size: 0.85rem;
+    word-break: break-word;
+}
+
+.fn-stats {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 0.15rem;
+}
+
+.function-chart-section {
+    margin-top: 1rem;
+}
+
+@media (max-width: 960px) {
+    .dashboard {
+        grid-template-columns: 1fr;
+    }
+
+    .functions-panel {
+        order: -1;
+    }
+
+    .function-list {
+        max-height: 240px;
+    }
+}

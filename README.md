@@ -94,6 +94,36 @@ php bin/import.php status
 vendor/bin/phpunit
 ```
 
+## Web UI
+
+After importing logs, start the built-in PHP server with the project router:
+
+```bash
+php -S localhost:8080 -t public public/router.php
+```
+
+Open [http://localhost:8080](http://localhost:8080) in a browser.
+
+The UI provides:
+
+- Overview chart of CPU usage and players online (dispatcher) or source CPU usage (lua/sql/special)
+- Time range: 1h, 24h, 7d — anchored at the latest data by default, with datetime picker and history navigation
+- Top functions list per source with sorting by max/avg CPU or total time
+- Per-function CPU chart with players online correlation
+
+JSON API is available at `/api.php`:
+
+| Action | Parameters |
+|--------|------------|
+| `meta` | — |
+| `overview` | `range`, `end`, `source` |
+| `top-functions` | `range`, `end`, `source`, `sort`, `limit` |
+| `function-series` | `range`, `end`, `description_id` |
+
+Database path follows `OTS_DB_PATH` (default: `var/ots-stats.sqlite`).
+
+Production: point nginx/Apache `root` to `public/` and expose `api.php` from the project root.
+
 ## Database
 
 SQLite schema in `database/schema.sql`. Main tables:
