@@ -68,6 +68,7 @@ final class Database
 
         $this->pdo->exec('PRAGMA synchronous=NORMAL');
         $this->pdo->exec('PRAGMA foreign_keys=ON');
+        $this->rebuildOverviewAgg();
         $this->applySecondaryIndexes();
         $this->pdo->exec('PRAGMA optimize');
         $this->importSessionActive = false;
@@ -94,6 +95,21 @@ final class Database
         }
     }
 
+    private function rebuildOverviewAgg(): void
+    {
+        $this->pdo->exec('DELETE FROM cpu_overview_agg');
+        $this->pdo->exec(
+            'INSERT INTO cpu_overview_agg (source, bucket_time, avg_cpu_usage, avg_players_online, sample_count)
+             SELECT source,
+                    (reported_at / 30) * 30 AS bucket_time,
+                    AVG(cpu_usage),
+                    AVG(players_online),
+                    COUNT(*)
+             FROM cpu_reports
+             GROUP BY source, bucket_time',
+        );
+    }
+
     private function dropSecondaryIndexes(): void
     {
         foreach ($this->indexNames() as $name) {
@@ -115,6 +131,8 @@ final class Database
     {
         return [
             'idx_cpu_reports_source_time',
+            'idx_cpu_reports_overview',
+            'idx_cpu_stats_report',
             'idx_cpu_stats_desc_time',
             'idx_cpu_stats_real_usage',
             'idx_slow_events_source_time',

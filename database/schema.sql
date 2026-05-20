@@ -36,6 +36,15 @@ CREATE TABLE IF NOT EXISTS slow_events (
     detail TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS cpu_overview_agg (
+    source TEXT NOT NULL,
+    bucket_time INTEGER NOT NULL,
+    avg_cpu_usage REAL,
+    avg_players_online REAL,
+    sample_count INTEGER NOT NULL,
+    PRIMARY KEY(source, bucket_time)
+);
+
 CREATE TABLE IF NOT EXISTS import_files (
     file_key TEXT PRIMARY KEY,
     path TEXT NOT NULL,

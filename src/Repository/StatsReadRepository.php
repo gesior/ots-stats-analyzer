@@ -208,6 +208,14 @@ final class StatsReadRepository
      */
     private function fetchDispatcherOverview(int $start, int $end, int $bucket): array
     {
+        $hasAggData = (int) $this->pdo->query(
+            'SELECT COUNT(*) FROM cpu_overview_agg WHERE source = \'dispatcher\' LIMIT 1',
+        )->fetchColumn();
+
+        if ($hasAggData > 0) {
+            return $this->fetchDispatcherOverviewFromAgg($start, $end, $bucket);
+        }
+
         $sql = <<<SQL
             SELECT (reported_at / :bucket) * :bucket AS t,
                    AVG(cpu_usage) AS cpu_usage,
@@ -216,6 +224,32 @@ final class StatsReadRepository
             WHERE source = 'dispatcher'
               AND reported_at > :start
               AND reported_at <= :end
+            GROUP BY t
+            ORDER BY t
+        SQL;
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->bindValue(':bucket', $bucket, PDO::PARAM_INT);
+        $stmt->bindValue(':start', $start, PDO::PARAM_INT);
+        $stmt->bindValue(':end', $end, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $this->mapOverviewPoints($stmt, true);
+    }
+
+    /**
+     * @return list<array{t: int, cpu_usage: ?float, players_online: ?float}>
+     */
+    private function fetchDispatcherOverviewFromAgg(int $start, int $end, int $bucket): array
+    {
+        $sql = <<<SQL
+            SELECT (bucket_time / :bucket) * :bucket AS t,
+                   SUM(avg_cpu_usage * sample_count) / SUM(sample_count) AS cpu_usage,
+                   SUM(avg_players_online * sample_count) / SUM(sample_count) AS players_online
+            FROM cpu_overview_agg
+            WHERE source = 'dispatcher'
+              AND bucket_time > :start
+              AND bucket_time <= :end
             GROUP BY t
             ORDER BY t
         SQL;

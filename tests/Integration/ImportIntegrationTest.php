@@ -63,6 +63,44 @@ final class ImportIntegrationTest extends TestCase
         $this->assertSame($cpuStatsCount, (int) $pdo->query('SELECT COUNT(*) FROM cpu_stats')->fetchColumn());
     }
 
+    public function testImportPopulatesCpuOverviewAgg(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $config = require $root . '/config/import.php';
+        $config['dedup_days'] = 7;
+        $config['batch_size'] = 100;
+
+        $dbPath = $this->tmpDir . '/var/test.sqlite';
+        $database = new Database($dbPath, $root . '/database/schema.sql', $root . '/database/indexes.sql');
+
+        $orchestrator = new ImportOrchestrator(
+            $database,
+            $config,
+            $this->tmpDir . '/data',
+        );
+
+        $orchestrator->run(new NullOutput(), 0);
+
+        $pdo = $database->pdo();
+
+        $aggCount = (int) $pdo->query(
+            "SELECT COUNT(*) FROM cpu_overview_agg WHERE source = 'dispatcher'",
+        )->fetchColumn();
+        $this->assertGreaterThan(0, $aggCount);
+
+        $rawAvg = (float) $pdo->query(
+            "SELECT AVG(cpu_usage) FROM cpu_reports WHERE source = 'dispatcher' AND cpu_usage IS NOT NULL",
+        )->fetchColumn();
+
+        $aggAvg = (float) $pdo->query(
+            "SELECT SUM(avg_cpu_usage * sample_count) / SUM(sample_count)
+             FROM cpu_overview_agg
+             WHERE source = 'dispatcher' AND avg_cpu_usage IS NOT NULL",
+        )->fetchColumn();
+
+        $this->assertEqualsWithDelta($rawAvg, $aggAvg, 0.001);
+    }
+
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {
