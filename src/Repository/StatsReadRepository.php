@@ -278,12 +278,17 @@ final class StatsReadRepository
 
         $sql = <<<SQL
             SELECT (r.reported_at / :bucket) * :bucket AS t,
-                   SUM(s.real_usage) AS real_usage
-            FROM cpu_stats s
-            INNER JOIN cpu_reports r ON r.id = s.report_id
-            WHERE r.source = :source
-              AND r.reported_at > :start
-              AND r.reported_at <= :end
+                   AVG(totals.report_total) AS real_usage
+            FROM (
+                SELECT s.report_id, SUM(s.real_usage) AS report_total
+                FROM cpu_stats s
+                INNER JOIN cpu_reports r ON r.id = s.report_id
+                WHERE r.source = :source
+                  AND r.reported_at > :start
+                  AND r.reported_at <= :end
+                GROUP BY s.report_id
+            ) totals
+            INNER JOIN cpu_reports r ON r.id = totals.report_id
             GROUP BY t
             ORDER BY t
         SQL;
@@ -313,7 +318,7 @@ final class StatsReadRepository
     {
         $sql = <<<SQL
             SELECT (bucket_time / :bucket) * :bucket AS t,
-                   SUM(total_real_usage) AS real_usage
+                   SUM(avg_report_real_usage * report_count) / SUM(report_count) AS real_usage
             FROM cpu_source_usage_agg
             WHERE source = :source
               AND bucket_time > :start

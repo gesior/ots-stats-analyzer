@@ -132,3 +132,4 @@ SQLite schema in `database/schema.sql`. Main tables:
 - `slow_events` — single slow executions from `*_slow.log` and `*_very_slow.log`
 - `descriptions` — normalized function/SQL/script names
 - `import_files` — per-file byte offset for resume
+- `cpu_source_usage_agg` — pre-aggregated per-source overview (30s buckets); rebuild on import

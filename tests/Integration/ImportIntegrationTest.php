@@ -126,18 +126,24 @@ final class ImportIntegrationTest extends TestCase
         )->fetchColumn();
         $this->assertGreaterThan(0, $aggCount);
 
-        $rawSum = (float) $pdo->query(
-            'SELECT SUM(s.real_usage)
-             FROM cpu_stats s
-             INNER JOIN cpu_reports r ON r.id = s.report_id
-             WHERE r.source = \'lua\'',
+        $rawAvg = (float) $pdo->query(
+            'SELECT AVG(t.report_total)
+             FROM (
+                 SELECT s.report_id, SUM(s.real_usage) AS report_total
+                 FROM cpu_stats s
+                 INNER JOIN cpu_reports r ON r.id = s.report_id
+                 WHERE r.source = \'lua\'
+                 GROUP BY s.report_id
+             ) t',
         )->fetchColumn();
 
-        $aggSum = (float) $pdo->query(
-            "SELECT SUM(total_real_usage) FROM cpu_source_usage_agg WHERE source = 'lua'",
+        $aggAvg = (float) $pdo->query(
+            "SELECT SUM(avg_report_real_usage * report_count) / SUM(report_count)
+             FROM cpu_source_usage_agg
+             WHERE source = 'lua'",
         )->fetchColumn();
 
-        $this->assertEqualsWithDelta($rawSum, $aggSum, 0.001);
+        $this->assertEqualsWithDelta($rawAvg, $aggAvg, 0.001);
     }
 
     public function testImportPopulatesFunctionBucketAgg(): void

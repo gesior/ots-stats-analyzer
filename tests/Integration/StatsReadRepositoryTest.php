@@ -108,6 +108,41 @@ final class StatsReadRepositoryTest extends TestCase
         $this->assertArrayNotHasKey('cpu_usage', $first);
     }
 
+    public function testLuaOverviewSevenDayRangeStaysWithinHundredPercent(): void
+    {
+        $hour = $this->repository->overview('lua', $this->latestEnd, 'hour');
+        $sevenDay = $this->repository->overview('lua', $this->latestEnd, '7d');
+
+        $this->assertNotEmpty($sevenDay['points']);
+
+        foreach ($sevenDay['points'] as $point) {
+            $this->assertLessThanOrEqual(
+                100.0,
+                $point['real_usage'],
+                'Overview real_usage must not exceed 100% for single-threaded source totals',
+            );
+        }
+
+        $hourValues = array_filter(
+            array_column($hour['points'], 'real_usage'),
+            static fn ($v) => $v !== null,
+        );
+        $sevenDayValues = array_filter(
+            array_column($sevenDay['points'], 'real_usage'),
+            static fn ($v) => $v !== null,
+        );
+
+        if ($hourValues !== [] && $sevenDayValues !== []) {
+            $hourMax = max($hourValues);
+            $sevenDayMax = max($sevenDayValues);
+            $this->assertLessThanOrEqual(
+                $hourMax * 2,
+                $sevenDayMax,
+                '7d overview must not inflate far above 1h peak when using the same end anchor',
+            );
+        }
+    }
+
     public function testTopFunctionsReturnsSortedLuaEntries(): void
     {
         $result = $this->repository->topFunctions('lua', $this->latestEnd, 'day', 'max', 10);

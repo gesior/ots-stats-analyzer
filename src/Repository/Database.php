@@ -144,13 +144,17 @@ final class Database
     {
         $this->pdo->exec('DELETE FROM cpu_source_usage_agg');
         $this->pdo->exec(
-            'INSERT INTO cpu_source_usage_agg (source, bucket_time, total_real_usage, sample_count)
+            'INSERT INTO cpu_source_usage_agg (source, bucket_time, avg_report_real_usage, report_count)
              SELECT r.source,
                     (r.reported_at / 30) * 30 AS bucket_time,
-                    SUM(s.real_usage),
-                    COUNT(*)
-             FROM cpu_stats s
-             INNER JOIN cpu_reports r ON r.id = s.report_id
+                    AVG(t.report_total),
+                    COUNT(DISTINCT r.id)
+             FROM (
+                 SELECT report_id, SUM(real_usage) AS report_total
+                 FROM cpu_stats
+                 GROUP BY report_id
+             ) t
+             INNER JOIN cpu_reports r ON r.id = t.report_id
              GROUP BY r.source, bucket_time',
         );
     }

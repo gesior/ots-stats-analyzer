@@ -48,8 +48,8 @@ CREATE TABLE IF NOT EXISTS cpu_overview_agg (
 CREATE TABLE IF NOT EXISTS cpu_source_usage_agg (
     source TEXT NOT NULL,
     bucket_time INTEGER NOT NULL,
-    total_real_usage REAL NOT NULL,
-    sample_count INTEGER NOT NULL,
+    avg_report_real_usage REAL NOT NULL,
+    report_count INTEGER NOT NULL,
     PRIMARY KEY(source, bucket_time)
 );
 
