@@ -178,6 +178,35 @@ final class StatsReadRepositoryTest extends TestCase
         }
     }
 
+    public function testTopFunctionsHandlesMalformedUtf8DescriptionsGracefully(): void
+    {
+        $pdo = $this->database->pdo();
+        
+        $pdo->exec('PRAGMA query_only=OFF');
+        
+        $pdo->exec("INSERT INTO descriptions (source, description) VALUES ('sql', 'INSERT INTO foo VALUES (\"\xb6\x5c\x6e\")')");
+        $descId = (int) $pdo->lastInsertId();
+        
+        $pdo->exec("INSERT INTO cpu_reports (source, reported_at) VALUES ('sql', {$this->latestEnd})");
+        $reportId = (int) $pdo->lastInsertId();
+        
+        $pdo->exec("INSERT INTO cpu_stats (report_id, description_id, time_ms, calls, rel_usage, real_usage) VALUES ({$reportId}, {$descId}, 100, 1, 1.0, 1.0)");
+        
+        $result = $this->repository->topFunctions('sql', $this->latestEnd, 'day', 'total', 10);
+        $this->assertNotEmpty($result['functions']);
+        
+        $found = false;
+        foreach ($result['functions'] as $func) {
+            if ($func['description_id'] === $descId) {
+                $found = true;
+                $this->assertTrue(mb_check_encoding($func['description'], 'UTF-8'));
+                $json = json_encode($result, JSON_THROW_ON_ERROR);
+                $this->assertIsString($json);
+            }
+        }
+        $this->assertTrue($found, 'The custom SQL query with invalid UTF-8 should be fetched.');
+    }
+
     public function testFunctionSeriesReturnsPointsForKnownDescription(): void
     {
         $top = $this->repository->topFunctions('dispatcher', $this->latestEnd, 'day', 'max', 1);

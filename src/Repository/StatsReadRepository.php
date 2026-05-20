@@ -127,7 +127,7 @@ final class StatsReadRepository
         while ($row = $stmt->fetch()) {
             $functions[] = [
                 'description_id' => (int) $row['description_id'],
-                'description' => (string) $row['description'],
+                'description' => $this->sanitizeDescription((string) $row['description']),
                 'max_real_usage' => (float) $row['max_real_usage'],
                 'avg_real_usage' => (float) $row['avg_real_usage'],
                 'total_time_ms' => (int) $row['total_time_ms'],
@@ -197,7 +197,7 @@ final class StatsReadRepository
 
         return [
             'description_id' => $descriptionId,
-            'description' => (string) $desc['description'],
+            'description' => $this->sanitizeDescription((string) $desc['description']),
             'source' => (string) $desc['source'],
             'range' => $range,
             'start' => $window['start'],
@@ -385,7 +385,7 @@ final class StatsReadRepository
         while ($row = $stmt->fetch()) {
             $functions[] = [
                 'description_id' => (int) $row['description_id'],
-                'description' => (string) $row['description'],
+                'description' => $this->sanitizeDescription((string) $row['description']),
                 'max_real_usage' => (float) $row['max_real_usage'],
                 'avg_real_usage' => (float) $row['avg_real_usage'],
                 'total_time_ms' => (int) $row['total_time_ms'],
@@ -464,5 +464,10 @@ final class StatsReadRepository
         if (!in_array($sort, ['max', 'avg', 'total'], true)) {
             throw new InvalidArgumentException("Invalid sort: {$sort}");
         }
+    }
+
+    private function sanitizeDescription(string $description): string
+    {
+        return mb_convert_encoding($description, 'UTF-8', 'UTF-8');
     }
 }
