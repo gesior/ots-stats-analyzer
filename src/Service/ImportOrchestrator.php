@@ -102,7 +102,11 @@ final class ImportOrchestrator
             }
         } finally {
             if ($remainingBytes > 0) {
-                $this->database->endImportSession();
+                $this->database->endImportSession(
+                    static function (string $message) use ($output): void {
+                        $output->writeln('[post-import] ' . $message);
+                    },
+                );
             }
         }
 

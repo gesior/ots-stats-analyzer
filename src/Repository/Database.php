@@ -60,7 +60,7 @@ final class Database
         $this->importSessionActive = true;
     }
 
-    public function endImportSession(): void
+    public function endImportSession(?callable $onProgress = null): void
     {
         if (!$this->importSessionActive) {
             return;
@@ -68,10 +68,21 @@ final class Database
 
         $this->pdo->exec('PRAGMA synchronous=NORMAL');
         $this->pdo->exec('PRAGMA foreign_keys=ON');
-        $this->rebuildOverviewAgg();
-        $this->applySecondaryIndexes();
+        $this->rebuildSecondaryIndexesAndAgg($onProgress);
         $this->pdo->exec('PRAGMA optimize');
         $this->importSessionActive = false;
+    }
+
+    public function rebuildSecondaryIndexesAndAgg(?callable $onProgress = null): void
+    {
+        $this->reportProgress($onProgress, 'Rebuilding CPU overview aggregation...');
+        $started = microtime(true);
+        $this->rebuildOverviewAgg();
+        $this->reportProgress(
+            $onProgress,
+            sprintf('  Aggregation done in %s.', self::formatDuration(microtime(true) - $started)),
+        );
+        $this->applySecondaryIndexes($onProgress);
     }
 
     public function beginTransaction(): void
@@ -117,13 +128,70 @@ final class Database
         }
     }
 
-    private function applySecondaryIndexes(): void
+    private function applySecondaryIndexes(?callable $onProgress = null): void
+    {
+        $statements = $this->indexStatements();
+        $total = count($statements);
+
+        foreach ($statements as $index => $sql) {
+            $name = $this->extractIndexName($sql);
+            $this->reportProgress(
+                $onProgress,
+                sprintf('Creating index %s (%d/%d)...', $name, $index + 1, $total),
+            );
+            $started = microtime(true);
+            $this->pdo->exec($sql);
+            $this->reportProgress(
+                $onProgress,
+                sprintf('  %s done in %s.', $name, self::formatDuration(microtime(true) - $started)),
+            );
+        }
+    }
+
+    /** @return list<string> */
+    private function indexStatements(): array
     {
         if (!file_exists($this->indexesPath)) {
             throw new RuntimeException("Indexes not found: {$this->indexesPath}");
         }
 
-        $this->pdo->exec((string) file_get_contents($this->indexesPath));
+        $statements = [];
+        foreach (explode("\n", (string) file_get_contents($this->indexesPath)) as $line) {
+            $line = trim($line);
+            if ($line === '' || str_starts_with($line, '--')) {
+                continue;
+            }
+
+            $statements[] = $line;
+        }
+
+        return $statements;
+    }
+
+    private function extractIndexName(string $sql): string
+    {
+        if (preg_match('/CREATE\s+INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/i', $sql, $matches) === 1) {
+            return $matches[1];
+        }
+
+        return 'unknown';
+    }
+
+    private function reportProgress(?callable $onProgress, string $message): void
+    {
+        if ($onProgress !== null) {
+            $onProgress($message);
+        }
+    }
+
+    private static function formatDuration(float $seconds): string
+    {
+        $s = (int) round($seconds);
+        $h = intdiv($s, 3600);
+        $m = intdiv($s % 3600, 60);
+        $sec = $s % 60;
+
+        return sprintf('%02d:%02d:%02d', $h, $m, $sec);
     }
 
     /** @return list<string> */

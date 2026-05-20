@@ -27,33 +27,25 @@ echo "Rebuilding indexes and aggregation table...\n";
 $database = new Database($dbPath, $root . '/database/schema.sql', $root . '/database/indexes.sql');
 $pdo = $database->pdo();
 
-$pdo->exec('DROP INDEX IF EXISTS idx_cpu_reports_source_time');
-$pdo->exec('DROP INDEX IF EXISTS idx_cpu_reports_overview');
-$pdo->exec('DROP INDEX IF EXISTS idx_cpu_stats_report');
-$pdo->exec('DROP INDEX IF EXISTS idx_cpu_stats_desc_time');
-$pdo->exec('DROP INDEX IF EXISTS idx_cpu_stats_real_usage');
-$pdo->exec('DROP INDEX IF EXISTS idx_slow_events_source_time');
-$pdo->exec('DROP INDEX IF EXISTS idx_slow_events_desc');
+foreach ([
+    'idx_cpu_reports_source_time',
+    'idx_cpu_reports_overview',
+    'idx_cpu_stats_report',
+    'idx_cpu_stats_desc_time',
+    'idx_cpu_stats_real_usage',
+    'idx_slow_events_source_time',
+    'idx_slow_events_desc',
+] as $name) {
+    $pdo->exec("DROP INDEX IF EXISTS {$name}");
+}
 
 echo "  Old indexes dropped.\n";
 
-$pdo->exec((string) file_get_contents($root . '/database/indexes.sql'));
-echo "  New indexes created.\n";
-
-$pdo->exec('DELETE FROM cpu_overview_agg');
-$pdo->exec(
-    'INSERT INTO cpu_overview_agg (source, bucket_time, avg_cpu_usage, avg_players_online, sample_count)
-     SELECT source,
-            (reported_at / 30) * 30 AS bucket_time,
-            AVG(cpu_usage),
-            AVG(players_online),
-            COUNT(*)
-     FROM cpu_reports
-     GROUP BY source, bucket_time',
+$database->rebuildSecondaryIndexesAndAgg(
+    static function (string $message): void {
+        echo '  ', $message, "\n";
+    },
 );
-
-$aggCount = (int) $pdo->query('SELECT COUNT(*) FROM cpu_overview_agg')->fetchColumn();
-echo "  Aggregation table rebuilt ({$aggCount} rows).\n";
 
 $pdo->exec('PRAGMA optimize');
 echo "Done.\n";

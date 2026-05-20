@@ -275,6 +275,8 @@
             cpu: {
                 type: 'linear',
                 position: 'left',
+                min: isDispatcher ? 0 : undefined,
+                max: isDispatcher ? 100 : undefined,
                 title: { display: true, text: cpuLabel, color: '#8b9cb3' },
                 ticks: { color: '#8b9cb3' },
                 grid: { color: 'rgba(45, 58, 79, 0.6)' },
