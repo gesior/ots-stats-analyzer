@@ -75,7 +75,7 @@ function handleTopFunctions(StatsReadRepository $repository, array $config, arra
 {
     $source = (string) ($query['source'] ?? $config['default_source']);
     $range = (string) ($query['range'] ?? $config['default_range']);
-    $sort = (string) ($query['sort'] ?? 'max');
+    $sort = (string) ($query['sort'] ?? 'total');
     $limit = isset($query['limit']) ? (int) $query['limit'] : (int) $config['top_functions_limit'];
     $end = requireEndTimestamp($query, $repository);
 

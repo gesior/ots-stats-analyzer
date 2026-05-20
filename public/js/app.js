@@ -11,7 +11,7 @@
         end: null,
         earliest: null,
         latest: null,
-        sort: 'max',
+        sort: 'total',
         selectedDescriptionId: null,
         loadToken: 0,
     };
@@ -39,6 +39,7 @@
 
     async function init() {
         bindEvents();
+        els.sortSelect.value = state.sort;
         await loadMeta();
         await refresh();
     }
