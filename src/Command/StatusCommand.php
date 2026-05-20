@@ -4,40 +4,30 @@ declare(strict_types=1);
 
 namespace OtsStats\Command;
 
+use OtsStats\Console\CliInput;
+use OtsStats\Console\OutputInterface;
+use OtsStats\Console\Table;
 use OtsStats\Repository\Database;
 use OtsStats\Repository\ImportStateRepository;
-use Symfony\Component\Console\Attribute\AsCommand;
-use Symfony\Component\Console\Command\Command;
-use Symfony\Component\Console\Helper\Table;
-use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Input\InputOption;
-use Symfony\Component\Console\Output\OutputInterface;
 
-#[AsCommand(name: 'status', description: 'Show import state and database row counts')]
-final class StatusCommand extends Command
+final class StatusCommand
 {
     public function __construct(
         private readonly string $root,
         private readonly array $config,
     ) {
-        parent::__construct();
     }
 
-    protected function configure(): void
-    {
-        $this->addOption('db', null, InputOption::VALUE_REQUIRED, 'SQLite database path');
-    }
-
-    protected function execute(InputInterface $input, OutputInterface $output): int
+    public function execute(CliInput $input, OutputInterface $output): int
     {
         $dbPath = $this->resolvePath((string) ($input->getOption('db') ?? $this->config['db_path']));
         $schemaPath = $this->root . '/database/schema.sql';
         $indexesPath = $this->root . '/database/indexes.sql';
 
         if (!is_file($dbPath)) {
-            $output->writeln('<comment>Database not found. Run import first.</comment>');
+            $output->writeln('Database not found. Run import first.');
 
-            return Command::SUCCESS;
+            return 0;
         }
 
         $database = new Database($dbPath, $schemaPath, $indexesPath);
@@ -70,7 +60,7 @@ final class StatusCommand extends Command
         }
         $files->render();
 
-        return Command::SUCCESS;
+        return 0;
     }
 
     private static function formatBytes(int $bytes): string

@@ -13,7 +13,7 @@ use OtsStats\Repository\SqliteLimits;
 use OtsStats\Repository\ImportStateRepository;
 use OtsStats\Repository\SlowEventRepository;
 use OtsStats\Util\DedupKey;
-use Symfony\Component\Console\Output\OutputInterface;
+use OtsStats\Console\OutputInterface;
 
 final class ImportOrchestrator
 {

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace OtsStats\Service;
 
-use Symfony\Component\Console\Output\OutputInterface;
+use OtsStats\Console\OutputInterface;
 
 final class ImportProgressReporter
 {

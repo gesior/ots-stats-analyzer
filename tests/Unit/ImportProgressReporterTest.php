@@ -6,7 +6,7 @@ namespace OtsStats\Tests\Unit;
 
 use OtsStats\Service\ImportProgressReporter;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Console\Output\BufferedOutput;
+use OtsStats\Console\BufferedOutput;
 
 final class ImportProgressReporterTest extends TestCase
 {

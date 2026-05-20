@@ -4,35 +4,20 @@ declare(strict_types=1);
 
 namespace OtsStats\Command;
 
+use OtsStats\Console\CliInput;
+use OtsStats\Console\OutputInterface;
 use OtsStats\Repository\Database;
 use OtsStats\Service\ImportOrchestrator;
-use Symfony\Component\Console\Attribute\AsCommand;
-use Symfony\Component\Console\Command\Command;
-use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Input\InputOption;
-use Symfony\Component\Console\Output\OutputInterface;
 
-#[AsCommand(name: 'import', description: 'Import OTS statistics logs into SQLite')]
-final class ImportCommand extends Command
+final class ImportCommand
 {
     public function __construct(
         private readonly string $root,
         private readonly array $config,
     ) {
-        parent::__construct();
     }
 
-    protected function configure(): void
-    {
-        $this
-            ->addOption('data-dir', null, InputOption::VALUE_REQUIRED, 'Directory with log files')
-            ->addOption('db', null, InputOption::VALUE_REQUIRED, 'SQLite database path')
-            ->addOption('dedup-days', null, InputOption::VALUE_REQUIRED, 'Days of dedup keys to load into RAM')
-            ->addOption('memory-limit', null, InputOption::VALUE_REQUIRED, 'PHP memory_limit')
-            ->addOption('progress-interval', null, InputOption::VALUE_REQUIRED, 'Progress report interval in seconds (0=off)');
-    }
-
-    protected function execute(InputInterface $input, OutputInterface $output): int
+    public function execute(CliInput $input, OutputInterface $output): int
     {
         $memoryLimit = $input->getOption('memory-limit') ?? $this->config['memory_limit'];
         ini_set('memory_limit', (string) $memoryLimit);
@@ -54,7 +39,7 @@ final class ImportCommand extends Command
         $database = new Database($dbPath, $schemaPath, $indexesPath);
         $orchestrator = new ImportOrchestrator($database, $config, $dataDir);
 
-        return $orchestrator->run($output->getErrorOutput(), $progressInterval);
+        return $orchestrator->run($output, $progressInterval);
     }
 
     private function resolvePath(string $path): string

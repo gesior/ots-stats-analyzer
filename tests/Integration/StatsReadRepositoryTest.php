@@ -9,7 +9,7 @@ use OtsStats\Repository\StatsReadRepository;
 use OtsStats\Service\ImportOrchestrator;
 use OtsStats\Util\TimeRange;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Console\Output\NullOutput;
+use OtsStats\Console\NullOutput;
 
 final class StatsReadRepositoryTest extends TestCase
 {

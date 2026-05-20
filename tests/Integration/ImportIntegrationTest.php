@@ -7,7 +7,7 @@ namespace OtsStats\Tests\Integration;
 use OtsStats\Repository\Database;
 use OtsStats\Service\ImportOrchestrator;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Console\Output\NullOutput;
+use OtsStats\Console\NullOutput;
 
 final class ImportIntegrationTest extends TestCase
 {
