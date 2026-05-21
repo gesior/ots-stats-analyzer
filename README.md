@@ -1,13 +1,19 @@
 # OTS Stats Analyzer
 
-CLI tool to import [OTS Statistics](https://otland.net/threads/how-to-read-ots-statistics-logs.283722/) logs from a Tibia OT server into SQLite for analysis.
+Tool to import [OTS Statistics](https://otland.net/threads/how-to-read-ots-statistics-logs.283722/) logs into SQLite and a simple website UI for analysis.
 
-## Requirements
+![doc/ots-stats-analyser.png](doc/ots-stats-analyser.png)
+
+# Installation instruction
+
+In the file [doc/INSTALL.md](doc/INSTALL.md) is an installation instruction for Linux Ubuntu 22.04.
+
+### Requirements
 
 - PHP 8.1+
 - Composer
 
-## Setup
+### Setup
 
 ```bash
 composer install
@@ -57,8 +63,6 @@ set OTS_SQLITE_AGGRESSIVE=1
 php bin/import.php import --data-dir=data
 ```
 
-Progress reports **lines/s** and **rows inserted** — these are not the same as SQL statements. After tuning, expect roughly **2–4×** higher throughput on slow logs compared to the legacy 150-row inserts (e.g. ~30k → ~60–120k rows/s depending on disk and log content).
-
 ## Import
 
 First run (imports last 30 days by default; uses binary search on large rolling logs to skip older data):
@@ -102,6 +106,7 @@ php bin/import.php status
 
 ## Tests
 
+Run:
 ```bash
 vendor/bin/phpunit
 ```
