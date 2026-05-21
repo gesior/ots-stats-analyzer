@@ -13,6 +13,7 @@ return [
     'max_file_load_bytes' => (int) (getenv('OTS_MAX_FILE_LOAD_BYTES') ?: 67_108_864),
     'checkpoint_bytes' => (int) (getenv('OTS_CHECKPOINT_BYTES') ?: 33_554_432),
     'dedup_days' => (int) (getenv('OTS_DEDUP_DAYS') ?: 7),
+    'import_days' => (int) (getenv('OTS_IMPORT_DAYS') ?: 30),
     'progress_interval_seconds' => (float) (getenv('OTS_PROGRESS_INTERVAL') ?: 3),
     'sources' => ['dispatcher', 'lua', 'sql', 'special'],
     'file_types' => ['cpu', 'slow', 'very_slow'],

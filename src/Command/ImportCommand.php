@@ -31,6 +31,13 @@ final class ImportCommand
         if ($input->getOption('dedup-days') !== null) {
             $config['dedup_days'] = (int) $input->getOption('dedup-days');
         }
+        if ($input->getOption('days') !== null) {
+            $importDays = (int) $input->getOption('days');
+            if ($importDays < 0) {
+                throw new \InvalidArgumentException('--days must be >= 0 (0 = no limit)');
+            }
+            $config['import_days'] = $importDays;
+        }
 
         $progressInterval = $input->getOption('progress-interval') !== null
             ? (float) $input->getOption('progress-interval')

@@ -93,5 +93,6 @@ CREATE TABLE IF NOT EXISTS import_files (
     file_mtime INTEGER NOT NULL,
     byte_offset INTEGER NOT NULL DEFAULT 0,
     max_occurred_at INTEGER,
+    first_line TEXT,
     updated_at INTEGER NOT NULL
 );

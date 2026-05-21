@@ -20,6 +20,10 @@ Place log files in `data/` (flat layout):
 - `sql.log`, `sql_slow.log`, `sql_very_slow.log`
 - `special.log`, `special_slow.log`, `special_very_slow.log`
 
+You can also drop **daily dump files** alongside the standard names, e.g. `dispatcher_2026-05-20.log`, `dispatcher_slow_2026-05-20.log`. Each file is tracked separately in `import_files`.
+
+If you **replace** a log file under the same path (e.g. a new daily export overwrites `dispatcher.log`), the importer detects the change by the first line hash and re-imports the whole file instead of resuming from an old byte offset.
+
 ## Import performance
 
 The importer optimizes bulk loads:
@@ -41,6 +45,7 @@ If you stop import with Ctrl+C, rerun the same command — it continues from the
 | `OTS_READ_CHUNK_BYTES` | `67108864` | fread block size for `chunk` mode |
 | `OTS_MAX_FILE_LOAD_BYTES` | `67108864` | Max file size for `file` mode |
 | `OTS_MEMORY_LIMIT` | `32G` | PHP `memory_limit` |
+| `OTS_IMPORT_DAYS` | `30` | Import only log records from the last N days (`0` = no limit) |
 | `OTS_SQLITE_AGGRESSIVE` | off | Set to `1` for larger SQLite cache/mmap and `journal_mode=MEMORY` during import |
 
 Example for a machine with plenty of RAM (full import of large `*_slow.log` files):
@@ -56,16 +61,22 @@ Progress reports **lines/s** and **rows inserted** — these are not the same as
 
 ## Import
 
-First run (full import, may take a long time for multi-GB logs):
+First run (imports last 30 days by default; uses binary search on large rolling logs to skip older data):
 
 ```bash
 php bin/import.php import --data-dir=data --db=var/ots-stats.sqlite
 ```
 
-Incremental run (only new appended lines; deduplicates last 7 days via RAM):
+Incremental run (only new appended lines on unchanged files; deduplicates last 7 days via RAM):
 
 ```bash
 php bin/import.php import --data-dir=data --db=var/ots-stats.sqlite
+```
+
+Full historical import (no date limit):
+
+```bash
+php bin/import.php import --days=0 --data-dir=data --db=var/ots-stats.sqlite
 ```
 
 Progress is printed to stderr every 3 seconds (bytes, speed, ETA per file and total):
@@ -78,7 +89,8 @@ Options:
 
 - `--data-dir` — log directory (default: `data`)
 - `--db` — SQLite path (default: `var/ots-stats.sqlite`)
-- `--dedup-days=7` — load dedup keys from DB for this many days
+- `--days=30` — import only records from the last N days (`0` = no limit)
+- `--dedup-days=7` — load dedup keys from DB for this many days (incremental re-import)
 - `--memory-limit=32G` — PHP memory limit
 - `--progress-interval=0` — disable progress output
 
@@ -131,5 +143,5 @@ SQLite schema in `database/schema.sql`. Main tables:
 - `cpu_reports` / `cpu_stats` — 30-second CPU usage reports from `*.log`
 - `slow_events` — single slow executions from `*_slow.log` and `*_very_slow.log`
 - `descriptions` — normalized function/SQL/script names
-- `import_files` — per-file byte offset for resume
+- `import_files` — per-file byte offset, first-line hash, and resume state
 - `cpu_source_usage_agg` — pre-aggregated per-source overview (30s buckets); rebuild on import

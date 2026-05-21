@@ -35,6 +35,7 @@ final class ImportOrchestrator
     private array $maxCpuAt = [];
 
     private int $dedupCutoff;
+    private ?int $importCutoff = null;
     private bool $isIncremental;
     private int $checkpointBytes;
     private string $readMode;
@@ -65,9 +66,11 @@ final class ImportOrchestrator
     {
         $sources = $this->config['sources'];
         $dedupDays = (int) $this->config['dedup_days'];
+        $importDays = (int) ($this->config['import_days'] ?? 30);
         $batchSize = (int) $this->config['batch_size'];
 
         $this->dedupCutoff = time() - ($dedupDays * 86400);
+        $this->importCutoff = $importDays > 0 ? time() - ($importDays * 86400) : null;
         $this->isIncremental = $this->cpuReports->countReports() > 0
             || $this->slowEvents->count() > 0;
 
@@ -80,11 +83,11 @@ final class ImportOrchestrator
         foreach ($files as $file) {
             $size = (int) filesize($file['path']);
             $state = $this->importState->get($file['file_key']);
-            $offset = $state !== null ? min((int) $state['byte_offset'], $size) : 0;
-            if ($size < $offset) {
-                $offset = 0;
+            $start = $this->resolveStartOffset($file, $state, $size);
+            if ($start['skip']) {
+                continue;
             }
-            $remainingBytes += $size - $offset;
+            $remainingBytes += $size - $start['offset'];
         }
         $reporter->setSessionTotalBytes($remainingBytes);
 
@@ -134,7 +137,7 @@ final class ImportOrchestrator
         }
     }
 
-    /** @param array{file_key: string, source: string, type: string, path: string, severity: ?string} $file */
+    /** @param array{file_key: string, source: string, type: string, path: string, severity: ?string, is_rolling: bool} $file */
     private function importSlowFile(array $file, int $batchSize, ImportProgressReporter $reporter): void
     {
         $path = $file['path'];
@@ -145,15 +148,28 @@ final class ImportOrchestrator
         $fileSize = (int) filesize($path);
         $fileMtime = (int) filemtime($path);
         $state = $this->importState->get($fileKey);
-        $byteOffset = $this->resolveOffset($state, $fileSize);
+        $firstLineHash = LogFileIdentity::readFirstLineHash($path);
+        $start = $this->resolveStartOffset($file, $state, $fileSize, $firstLineHash);
 
+        if ($start['skip']) {
+            if ($state === null && $this->importCutoff !== null && $start['offset'] >= $fileSize) {
+                $reporter->skipFileOutsideWindow($fileKey, (int) ($this->config['import_days'] ?? 30));
+            } else {
+                $reporter->skipFile($fileKey);
+            }
+
+            return;
+        }
+
+        $byteOffset = $start['offset'];
         if ($byteOffset >= $fileSize) {
             $reporter->skipFile($fileKey);
 
             return;
         }
 
-        $maxAt = $this->maxSlowAt[$fileKey] ?? null;
+        $maxAtKey = "{$source}:{$severity}";
+        $maxAt = $this->maxSlowAt[$maxAtKey] ?? null;
         $this->descriptions->preloadSource($source);
         $parser = new SlowEventParser();
 
@@ -188,6 +204,7 @@ final class ImportOrchestrator
                         $byteOffset,
                         $checkpointAt,
                         $maxOccurredAt,
+                        $firstLineHash,
                     );
 
                     continue;
@@ -204,6 +221,7 @@ final class ImportOrchestrator
                         $byteOffset,
                         $checkpointAt,
                         $maxOccurredAt,
+                        $firstLineHash,
                     );
 
                     continue;
@@ -229,6 +247,7 @@ final class ImportOrchestrator
                     $byteOffset,
                     $checkpointAt,
                     $maxOccurredAt,
+                    $firstLineHash,
                 );
             }
 
@@ -237,7 +256,15 @@ final class ImportOrchestrator
             }
 
             $this->database->commit();
-            $this->importState->save($fileKey, $path, $fileSize, $fileMtime, $byteOffset, $maxOccurredAt);
+            $this->importState->save(
+                $fileKey,
+                $path,
+                $fileSize,
+                $fileMtime,
+                $byteOffset,
+                $maxOccurredAt,
+                $firstLineHash,
+            );
         } catch (\Throwable $e) {
             $this->database->rollBack();
             throw $e;
@@ -287,6 +314,10 @@ final class ImportOrchestrator
     private function buildSlowRow(string $source, string $severity, array $parsed, ?int $maxAt): ?array
     {
         $occurredAt = $parsed['occurred_at'];
+
+        if ($this->importCutoff !== null && $occurredAt < $this->importCutoff) {
+            return null;
+        }
 
         if ($this->isIncremental && $occurredAt < $this->dedupCutoff) {
             return null;
@@ -341,7 +372,7 @@ final class ImportOrchestrator
         ];
     }
 
-    /** @param array{file_key: string, source: string, type: string, path: string, severity: ?string} $file */
+    /** @param array{file_key: string, source: string, type: string, path: string, severity: ?string, is_rolling: bool} $file */
     private function importCpuFile(array $file, int $batchSize, ImportProgressReporter $reporter): void
     {
         $path = $file['path'];
@@ -351,8 +382,20 @@ final class ImportOrchestrator
         $fileSize = (int) filesize($path);
         $fileMtime = (int) filemtime($path);
         $state = $this->importState->get($fileKey);
-        $byteOffset = $this->resolveOffset($state, $fileSize);
+        $firstLineHash = LogFileIdentity::readFirstLineHash($path);
+        $start = $this->resolveStartOffset($file, $state, $fileSize, $firstLineHash);
 
+        if ($start['skip']) {
+            if ($state === null && $this->importCutoff !== null && $start['offset'] >= $fileSize) {
+                $reporter->skipFileOutsideWindow($fileKey, (int) ($this->config['import_days'] ?? 30));
+            } else {
+                $reporter->skipFile($fileKey);
+            }
+
+            return;
+        }
+
+        $byteOffset = $start['offset'];
         if ($byteOffset >= $fileSize) {
             $reporter->skipFile($fileKey);
 
@@ -387,6 +430,14 @@ final class ImportOrchestrator
                 $type = $event['type'] ?? '';
 
                 if ($type === 'report_start') {
+                    $reportedAt = (int) $event['reported_at'];
+                    if ($this->importCutoff !== null && $reportedAt < $this->importCutoff) {
+                        $currentReportId = null;
+                        $pendingReportMeta = null;
+
+                        continue;
+                    }
+
                     $currentReportId = null;
                     $pendingReportMeta = $event;
 
@@ -394,6 +445,12 @@ final class ImportOrchestrator
                 }
 
                 if ($type !== 'stat') {
+                    continue;
+                }
+
+                $reportedAt = (int) $event['reported_at'];
+                if ($this->importCutoff !== null && $reportedAt < $this->importCutoff) {
+                    $reporter->recordSkipped();
                     continue;
                 }
 
@@ -449,6 +506,7 @@ final class ImportOrchestrator
                     $byteOffset,
                     $checkpointAt,
                     $maxReportedAt,
+                    $firstLineHash,
                 );
             }
 
@@ -459,7 +517,15 @@ final class ImportOrchestrator
             }
 
             $this->database->commit();
-            $this->importState->save($fileKey, $path, $fileSize, $fileMtime, $byteOffset, $maxReportedAt);
+            $this->importState->save(
+                $fileKey,
+                $path,
+                $fileSize,
+                $fileMtime,
+                $byteOffset,
+                $maxReportedAt,
+                $firstLineHash,
+            );
         } catch (\Throwable $e) {
             $this->database->rollBack();
             throw $e;
@@ -476,13 +542,22 @@ final class ImportOrchestrator
         int $byteOffset,
         int $checkpointAt,
         int $maxTimestamp,
+        ?string $firstLineHash,
     ): int {
         if ($byteOffset - $checkpointAt < $this->checkpointBytes) {
             return $checkpointAt;
         }
 
         $this->database->commit();
-        $this->importState->save($fileKey, $path, $fileSize, $fileMtime, $byteOffset, $maxTimestamp);
+        $this->importState->save(
+            $fileKey,
+            $path,
+            $fileSize,
+            $fileMtime,
+            $byteOffset,
+            $maxTimestamp,
+            $firstLineHash,
+        );
         $this->database->beginTransaction();
 
         return $byteOffset;
@@ -509,6 +584,10 @@ final class ImportOrchestrator
     private function buildCpuStatRow(string $source, array $event, ?int $maxAt, int $reportId): ?array
     {
         $reportedAt = (int) $event['reported_at'];
+
+        if ($this->importCutoff !== null && $reportedAt < $this->importCutoff) {
+            return null;
+        }
 
         if ($this->isIncremental && $reportedAt < $this->dedupCutoff) {
             return null;
@@ -566,15 +645,50 @@ final class ImportOrchestrator
         ];
     }
 
-    /** @param array<string, mixed>|null $state */
-    private function resolveOffset(?array $state, int $fileSize): int
-    {
-        if ($state === null) {
-            return 0;
+    /**
+     * @param array{file_key: string, source: string, type: string, path: string, severity: ?string, is_rolling: bool} $file
+     * @param array<string, mixed>|null $state
+     * @return array{offset: int, skip: bool}
+     */
+    private function resolveStartOffset(
+        array $file,
+        ?array $state,
+        int $fileSize,
+        ?string $firstLineHash = null,
+    ): array {
+        if ($fileSize === 0) {
+            return ['offset' => 0, 'skip' => true];
         }
 
-        $offset = (int) $state['byte_offset'];
+        $path = $file['path'];
+        $storedFirstLine = $state !== null ? ($state['first_line'] ?? null) : null;
+        $byteOffset = $state !== null ? (int) $state['byte_offset'] : 0;
 
-        return $fileSize < $offset ? 0 : $offset;
+        if ($firstLineHash === null) {
+            $firstLineHash = LogFileIdentity::readFirstLineHash($path);
+        }
+
+        if ($state !== null && $storedFirstLine !== null && $firstLineHash !== null && $storedFirstLine !== $firstLineHash) {
+            return ['offset' => 0, 'skip' => false];
+        }
+
+        if ($state !== null && $byteOffset >= $fileSize) {
+            return ['offset' => $fileSize, 'skip' => true];
+        }
+
+        if ($state !== null && $byteOffset > 0 && $byteOffset < $fileSize) {
+            return ['offset' => $byteOffset, 'skip' => false];
+        }
+
+        if ($state === null && $file['is_rolling'] && $this->importCutoff !== null) {
+            $offset = LogStartOffsetFinder::find($path, $this->importCutoff);
+            if ($offset >= $fileSize) {
+                return ['offset' => $fileSize, 'skip' => true];
+            }
+
+            return ['offset' => $offset, 'skip' => false];
+        }
+
+        return ['offset' => 0, 'skip' => false];
     }
 }

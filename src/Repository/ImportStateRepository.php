@@ -29,16 +29,18 @@ final class ImportStateRepository
         int $fileMtime,
         int $byteOffset,
         ?int $maxOccurredAt,
+        ?string $firstLine = null,
     ): void {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO import_files (file_key, path, file_size, file_mtime, byte_offset, max_occurred_at, updated_at)
-             VALUES (:file_key, :path, :file_size, :file_mtime, :byte_offset, :max_occurred_at, :updated_at)
+            'INSERT INTO import_files (file_key, path, file_size, file_mtime, byte_offset, max_occurred_at, first_line, updated_at)
+             VALUES (:file_key, :path, :file_size, :file_mtime, :byte_offset, :max_occurred_at, :first_line, :updated_at)
              ON CONFLICT(file_key) DO UPDATE SET
                 path = excluded.path,
                 file_size = excluded.file_size,
                 file_mtime = excluded.file_mtime,
                 byte_offset = excluded.byte_offset,
                 max_occurred_at = excluded.max_occurred_at,
+                first_line = excluded.first_line,
                 updated_at = excluded.updated_at',
         );
         $stmt->execute([
@@ -48,6 +50,7 @@ final class ImportStateRepository
             'file_mtime' => $fileMtime,
             'byte_offset' => $byteOffset,
             'max_occurred_at' => $maxOccurredAt,
+            'first_line' => $firstLine,
             'updated_at' => time(),
         ]);
     }

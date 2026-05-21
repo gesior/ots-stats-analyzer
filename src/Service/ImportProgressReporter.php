@@ -56,6 +56,15 @@ final class ImportProgressReporter
         }
     }
 
+    public function skipFileOutsideWindow(string $fileKey, int $days): void
+    {
+        $this->output->writeln(sprintf(
+            '[%s] SKIP (no records within last %d days; use --days=0 for full history)',
+            $fileKey,
+            $days,
+        ));
+    }
+
     public function tick(int $bytesReadDelta = 0): void
     {
         $this->bytesDone += $bytesReadDelta;

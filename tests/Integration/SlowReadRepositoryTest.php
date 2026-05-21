@@ -36,6 +36,7 @@ final class SlowReadRepositoryTest extends TestCase
         $root = dirname(__DIR__, 2);
         $config = require $root . '/config/import.php';
         $config['dedup_days'] = 7;
+        $config['import_days'] = 0;
         $config['batch_size'] = 100;
 
         $dbPath = $this->tmpDir . '/var/test.sqlite';
