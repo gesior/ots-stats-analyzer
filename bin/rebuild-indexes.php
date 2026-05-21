@@ -34,7 +34,9 @@ foreach ([
     'idx_cpu_stats_desc_time',
     'idx_cpu_stats_real_usage',
     'idx_slow_events_source_time',
+    'idx_slow_events_source_occurred',
     'idx_slow_events_desc',
+    'idx_slow_events_desc_time',
 ] as $name) {
     $pdo->exec("DROP INDEX IF EXISTS {$name}");
 }

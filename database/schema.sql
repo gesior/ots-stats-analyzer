@@ -65,6 +65,27 @@ CREATE TABLE IF NOT EXISTS cpu_function_bucket_agg (
     PRIMARY KEY(source, bucket_time, description_id)
 );
 
+CREATE TABLE IF NOT EXISTS slow_overview_agg (
+    source TEXT NOT NULL,
+    bucket_time INTEGER NOT NULL,
+    event_count INTEGER NOT NULL,
+    min_execution_ms INTEGER NOT NULL,
+    max_execution_ms INTEGER NOT NULL,
+    sum_execution_ms INTEGER NOT NULL,
+    PRIMARY KEY(source, bucket_time)
+);
+
+CREATE TABLE IF NOT EXISTS slow_function_bucket_agg (
+    source TEXT NOT NULL,
+    bucket_time INTEGER NOT NULL,
+    description_id INTEGER NOT NULL,
+    event_count INTEGER NOT NULL,
+    min_execution_ms INTEGER NOT NULL,
+    max_execution_ms INTEGER NOT NULL,
+    sum_execution_ms INTEGER NOT NULL,
+    PRIMARY KEY(source, bucket_time, description_id)
+);
+
 CREATE TABLE IF NOT EXISTS import_files (
     file_key TEXT PRIMARY KEY,
     path TEXT NOT NULL,

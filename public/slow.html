@@ -3,21 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OTS Stats Analyzer</title>
+    <title>OTS Stats Analyzer — Lags</title>
     <link rel="stylesheet" href="css/app.css">
     <script src="js/chart.umd.min.js" defer></script>
-    <script src="js/app.js" defer></script>
+    <script src="js/slow.js" defer></script>
 </head>
 <body>
     <header class="header">
         <div class="header-row">
             <div>
                 <h1>OTS Stats Analyzer</h1>
-                <p class="subtitle">Overview of CPU statistics and online players</p>
+                <p class="subtitle">Slow execution events and lag trends</p>
             </div>
             <nav class="page-nav" aria-label="Page navigation">
-                <a href="index.html" class="active">CPU</a>
-                <a href="slow.html">Lags</a>
+                <a href="index.html">CPU</a>
+                <a href="slow.html" class="active">Lags</a>
             </nav>
         </div>
     </header>
@@ -46,9 +46,10 @@
                     <label>
                         Function sorting
                         <select id="sort-select">
-                            <option value="max">Max CPU %</option>
-                            <option value="avg">Avg CPU %</option>
-                            <option value="total" selected>Total time (ms)</option>
+                            <option value="count" selected>Event count</option>
+                            <option value="max">Max time (ms)</option>
+                            <option value="avg">Avg time (ms)</option>
+                            <option value="total">Total time (ms)</option>
                         </select>
                     </label>
                 </div>
@@ -58,16 +59,18 @@
         <div class="loading hidden" id="loading">Loading data...</div>
         <div class="error hidden" id="error"></div>
 
+        <section class="summary-cards hidden" id="summary-cards" aria-label="Period comparison"></section>
+
         <section class="dashboard">
             <div class="chart-panel">
-                <h2 id="overview-title">CPU and online players</h2>
+                <h2 id="overview-title">Lag activity over time</h2>
                 <div class="chart-wrap">
                     <canvas id="overview-chart"></canvas>
                 </div>
             </div>
 
             <aside class="functions-panel">
-                <h2>Top functions</h2>
+                <h2>Top lagging functions</h2>
                 <ol class="function-list" id="function-list"></ol>
             </aside>
         </section>

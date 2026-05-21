@@ -10,6 +10,7 @@ use RuntimeException;
 final class Database
 {
     private const FUNCTION_BUCKET_SECONDS = 3600;
+    private const SLOW_OVERVIEW_BUCKET_SECONDS = 30;
 
     private PDO $pdo;
     private bool $importSessionActive = false;
@@ -77,6 +78,13 @@ final class Database
 
     public function rebuildSecondaryIndexesAndAgg(?callable $onProgress = null): void
     {
+        $this->rebuildCpuAggregations($onProgress);
+        $this->rebuildSlowAggregations($onProgress);
+        $this->applySecondaryIndexes($onProgress);
+    }
+
+    public function rebuildCpuAggregations(?callable $onProgress = null): void
+    {
         $this->reportProgress($onProgress, 'Rebuilding CPU overview aggregation...');
         $started = microtime(true);
         $this->rebuildOverviewAgg();
@@ -100,8 +108,35 @@ final class Database
             $onProgress,
             sprintf('  Function bucket aggregation done in %s.', self::formatDuration(microtime(true) - $started)),
         );
+    }
 
+    public function rebuildSlowAggregations(?callable $onProgress = null): void
+    {
+        $this->reportProgress($onProgress, 'Rebuilding slow overview aggregation...');
+        $started = microtime(true);
+        $this->rebuildSlowOverviewAgg();
+        $this->reportProgress(
+            $onProgress,
+            sprintf('  Slow overview aggregation done in %s.', self::formatDuration(microtime(true) - $started)),
+        );
+
+        $this->reportProgress($onProgress, 'Rebuilding slow function bucket aggregation...');
+        $started = microtime(true);
+        $this->rebuildSlowFunctionBucketAgg();
+        $this->reportProgress(
+            $onProgress,
+            sprintf('  Slow function bucket aggregation done in %s.', self::formatDuration(microtime(true) - $started)),
+        );
+    }
+
+    public function applyNewIndexesOnly(?callable $onProgress = null): void
+    {
         $this->applySecondaryIndexes($onProgress);
+    }
+
+    public function slowEventCount(): int
+    {
+        return (int) $this->pdo->query('SELECT COUNT(*) FROM slow_events')->fetchColumn();
     }
 
     public function beginTransaction(): void
@@ -179,6 +214,46 @@ final class Database
              FROM cpu_stats s
              INNER JOIN cpu_reports r ON r.id = s.report_id
              GROUP BY r.source, bucket_time, s.description_id",
+        );
+    }
+
+    private function rebuildSlowOverviewAgg(): void
+    {
+        $bucket = self::SLOW_OVERVIEW_BUCKET_SECONDS;
+        $this->pdo->exec('DELETE FROM slow_overview_agg');
+        $this->pdo->exec(
+            "INSERT INTO slow_overview_agg (
+                 source, bucket_time, event_count, min_execution_ms, max_execution_ms, sum_execution_ms
+             )
+             SELECT source,
+                    (occurred_at / {$bucket}) * {$bucket} AS bucket_time,
+                    COUNT(*),
+                    MIN(execution_ms),
+                    MAX(execution_ms),
+                    SUM(execution_ms)
+             FROM slow_events
+             GROUP BY source, bucket_time",
+        );
+    }
+
+    private function rebuildSlowFunctionBucketAgg(): void
+    {
+        $bucket = self::FUNCTION_BUCKET_SECONDS;
+        $this->pdo->exec('DELETE FROM slow_function_bucket_agg');
+        $this->pdo->exec(
+            "INSERT INTO slow_function_bucket_agg (
+                 source, bucket_time, description_id,
+                 event_count, min_execution_ms, max_execution_ms, sum_execution_ms
+             )
+             SELECT source,
+                    (occurred_at / {$bucket}) * {$bucket} AS bucket_time,
+                    description_id,
+                    COUNT(*),
+                    MIN(execution_ms),
+                    MAX(execution_ms),
+                    SUM(execution_ms)
+             FROM slow_events
+             GROUP BY source, bucket_time, description_id",
         );
     }
 
@@ -265,7 +340,9 @@ final class Database
             'idx_cpu_stats_desc_time',
             'idx_cpu_stats_real_usage',
             'idx_slow_events_source_time',
+            'idx_slow_events_source_occurred',
             'idx_slow_events_desc',
+            'idx_slow_events_desc_time',
         ];
     }
 }
