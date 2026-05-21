@@ -6,6 +6,8 @@ declare(strict_types=1);
 use OtsStats\Command\ImportCommand;
 use OtsStats\Command\StatusCommand;
 use OtsStats\Console\Application;
+use OtsStats\Console\ConsoleOutput;
+use OtsStats\Service\ImportProgressReporter;
 
 $root = dirname(__DIR__);
 
@@ -23,4 +25,16 @@ $application->add('import', 'Import OTS statistics logs into SQLite', [$importCm
 $statusCmd = new StatusCommand($root, $config);
 $application->add('status', 'Show import state and database row counts', [$statusCmd, 'execute']);
 
-exit($application->run());
+$exitCode = $application->run();
+
+$output = new ConsoleOutput();
+$output->writeln(sprintf(
+    '<comment>Peak PHP memory allocation: %s</comment>',
+    ImportProgressReporter::formatBytes(memory_get_peak_usage()),
+));
+$output->writeln(sprintf(
+    '<comment>Peak PHP memory real usage: %s</comment>',
+    ImportProgressReporter::formatBytes(memory_get_peak_usage(true)),
+));
+
+exit($exitCode);
