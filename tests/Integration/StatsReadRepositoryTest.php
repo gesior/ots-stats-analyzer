@@ -67,6 +67,9 @@ final class StatsReadRepositoryTest extends TestCase
 
     protected function tearDown(): void
     {
+        unset($this->repository);
+        $this->database->close();
+        unset($this->database);
         $this->removeDir($this->tmpDir);
     }
 

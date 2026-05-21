@@ -12,7 +12,7 @@ final class Database
     private const FUNCTION_BUCKET_SECONDS = 3600;
     private const SLOW_OVERVIEW_BUCKET_SECONDS = 30;
 
-    private PDO $pdo;
+    private ?PDO $pdo = null;
     private bool $importSessionActive = false;
 
     public function __construct(string $dbPath, string $schemaPath, private readonly string $indexesPath)
@@ -38,7 +38,25 @@ final class Database
 
     public function pdo(): PDO
     {
+        if ($this->pdo === null) {
+            throw new RuntimeException('Database connection is closed');
+        }
+
         return $this->pdo;
+    }
+
+    public function close(): void
+    {
+        if ($this->pdo === null) {
+            return;
+        }
+
+        try {
+            $this->pdo->exec('PRAGMA wal_checkpoint(TRUNCATE)');
+        } catch (\Throwable) {
+        }
+
+        $this->pdo = null;
     }
 
     public function beginImportSession(): void
