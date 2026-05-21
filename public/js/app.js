@@ -348,6 +348,7 @@
 
         const labels = data.points.map((p) => formatLabel(p.t));
         const hasPlayers = data.points.some((p) => p.players_online !== null && p.players_online !== undefined);
+        const hasCalls = data.points.some((p) => p.calls !== null && p.calls !== undefined);
 
         const datasets = [
             {
@@ -391,6 +392,27 @@
                 type: 'linear',
                 position: 'right',
                 title: { display: true, text: 'Online players', color: '#8b9cb3' },
+                ticks: { color: '#8b9cb3' },
+                grid: { drawOnChartArea: false },
+            };
+        }
+
+        if (hasCalls) {
+            datasets.push({
+                label: 'Calls',
+                data: data.points.map((p) => p.calls),
+                borderColor: '#54d390',
+                backgroundColor: 'rgba(84, 211, 144, 0.12)',
+                yAxisID: 'calls',
+                tension: 0.15,
+                pointRadius: 0,
+                borderWidth: 2,
+            });
+            scales.calls = {
+                type: 'linear',
+                position: 'right',
+                offset: hasPlayers,
+                title: { display: true, text: 'Calls', color: '#8b9cb3' },
                 ticks: { color: '#8b9cb3' },
                 grid: { drawOnChartArea: false },
             };
