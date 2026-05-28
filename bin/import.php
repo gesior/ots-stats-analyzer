@@ -36,5 +36,9 @@ $output->writeln(sprintf(
     '<comment>Peak PHP memory real usage: %s</comment>',
     ImportProgressReporter::formatBytes(memory_get_peak_usage(true)),
 ));
+$output->writeln(sprintf(
+    '<comment>Peak process RSS (OS-level): %s</comment>',
+    ImportProgressReporter::formatBytes(ImportProgressReporter::getPeakRssBytes()),
+));
 
 exit($exitCode);
