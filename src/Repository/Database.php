@@ -89,6 +89,9 @@ final class Database
 
         $this->pdo->exec('PRAGMA synchronous=NORMAL');
         $this->pdo->exec('PRAGMA foreign_keys=ON');
+        $this->pdo->exec('PRAGMA cache_size=-2000');
+        $this->pdo->exec('PRAGMA temp_store=DEFAULT');
+        $this->pdo->exec('PRAGMA mmap_size=0');
         $this->rebuildSecondaryIndexesAndAgg($onProgress);
         $this->pdo->exec('PRAGMA optimize');
         $this->importSessionActive = false;
