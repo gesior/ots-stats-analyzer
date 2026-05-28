@@ -164,6 +164,24 @@ final class ImportProgressReporter
         return sprintf('%02d:%02d:%02d', $h, $m, $sec);
     }
 
+    /**
+     * Returns peak resident set size (RSS) in bytes from the OS.
+     * On Linux reads VmHWM from /proc/self/status.
+     * Falls back to memory_get_peak_usage(true) on other platforms.
+     */
+    public static function getPeakRssBytes(): int
+    {
+        $statusFile = '/proc/self/status';
+        if (is_readable($statusFile)) {
+            $contents = file_get_contents($statusFile);
+            if ($contents !== false && preg_match('/VmHWM:\s+(\d+)\s+kB/', $contents, $m)) {
+                return (int) $m[1] * 1024;
+            }
+        }
+
+        return memory_get_peak_usage(true);
+    }
+
     public static function formatCount(int $n): string
     {
         if ($n >= 1_000_000) {
