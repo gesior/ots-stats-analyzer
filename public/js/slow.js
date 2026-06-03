@@ -19,6 +19,7 @@
     let overviewChart = null;
     let functionChart = null;
     let endTimeDebounce = null;
+    let lastOverviewData = null;
 
     const els = {
         sourceTabs: document.getElementById('source-tabs'),
@@ -280,6 +281,7 @@
     }
 
     function renderOverview(data) {
+        lastOverviewData = data;
         els.overviewTitle.textContent = `Lag activity (${data.source})`;
 
         const labels = data.points.map((p) => formatLabel(p.t));
@@ -389,17 +391,40 @@
         });
     }
 
+    function alignFunctionPoints(overview, seriesPoints) {
+        const overviewPoints = overview?.points ?? [];
+        if (overviewPoints.length === 0) {
+            return seriesPoints;
+        }
+
+        const byT = new Map(seriesPoints.map((p) => [p.t, p]));
+        return overviewPoints.map((op) => {
+            const matched = byT.get(op.t);
+            if (matched) {
+                return matched;
+            }
+            return {
+                t: op.t,
+                event_count: null,
+                min_execution_ms: null,
+                max_execution_ms: null,
+                avg_execution_ms: null,
+            };
+        });
+    }
+
     function renderFunctionSeries(data) {
         els.functionTitle.textContent = data.description;
 
-        const labels = data.points.map((p) => formatLabel(p.t));
-        const showMin = data.points.some((p) => p.event_count >= 3 && p.min_execution_ms !== null);
+        const points = alignFunctionPoints(lastOverviewData, data.points);
+        const labels = points.map((p) => formatLabel(p.t));
+        const showMin = points.some((p) => p.event_count >= 3 && p.min_execution_ms !== null);
 
         const datasets = [
             {
                 type: 'bar',
                 label: 'Events',
-                data: data.points.map((p) => p.event_count),
+                data: points.map((p) => p.event_count),
                 backgroundColor: 'rgba(255, 107, 107, 0.55)',
                 borderColor: '#ff6b6b',
                 yAxisID: 'events',
@@ -407,7 +432,7 @@
             {
                 type: 'line',
                 label: 'Max time (ms)',
-                data: data.points.map((p) => p.max_execution_ms),
+                data: points.map((p) => p.max_execution_ms),
                 borderColor: '#ff9f43',
                 backgroundColor: 'rgba(255, 159, 67, 0.12)',
                 yAxisID: 'time',
@@ -418,7 +443,7 @@
             {
                 type: 'line',
                 label: 'Avg time (ms)',
-                data: data.points.map((p) => p.avg_execution_ms),
+                data: points.map((p) => p.avg_execution_ms),
                 borderColor: '#4da3ff',
                 backgroundColor: 'transparent',
                 yAxisID: 'time',
@@ -432,7 +457,7 @@
             datasets.push({
                 type: 'line',
                 label: 'Min time (ms)',
-                data: data.points.map((p) => (p.event_count >= 3 ? p.min_execution_ms : null)),
+                data: points.map((p) => (p.event_count >= 3 ? p.min_execution_ms : null)),
                 borderColor: '#8b9cb3',
                 backgroundColor: 'transparent',
                 yAxisID: 'time',

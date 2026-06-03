@@ -19,6 +19,7 @@
     let overviewChart = null;
     let functionChart = null;
     let endTimeDebounce = null;
+    let lastOverviewData = null;
 
     const els = {
         sourceTabs: document.getElementById('source-tabs'),
@@ -233,6 +234,7 @@
     }
 
     function renderOverview(data) {
+        lastOverviewData = data;
         const isDispatcher = data.source === 'dispatcher';
         els.overviewTitle.textContent = isDispatcher
             ? 'CPU and online players (dispatcher)'
@@ -343,17 +345,40 @@
         });
     }
 
+    function alignFunctionPoints(overview, seriesPoints) {
+        const overviewPoints = overview?.points ?? [];
+        if (overviewPoints.length === 0) {
+            return seriesPoints;
+        }
+
+        const byT = new Map(seriesPoints.map((p) => [p.t, p]));
+        return overviewPoints.map((op) => {
+            const matched = byT.get(op.t);
+            if (matched) {
+                return matched;
+            }
+            return {
+                t: op.t,
+                real_usage: null,
+                time_ms: null,
+                calls: null,
+                players_online: null,
+            };
+        });
+    }
+
     function renderFunctionSeries(data) {
         els.functionTitle.textContent = data.description;
 
-        const labels = data.points.map((p) => formatLabel(p.t));
-        const hasPlayers = data.points.some((p) => p.players_online !== null && p.players_online !== undefined);
-        const hasCalls = data.points.some((p) => p.calls !== null && p.calls !== undefined);
+        const points = alignFunctionPoints(lastOverviewData, data.points);
+        const labels = points.map((p) => formatLabel(p.t));
+        const hasPlayers = points.some((p) => p.players_online !== null && p.players_online !== undefined);
+        const hasCalls = points.some((p) => p.calls !== null && p.calls !== undefined);
 
         const datasets = [
             {
                 label: 'Real usage %',
-                data: data.points.map((p) => p.real_usage),
+                data: points.map((p) => p.real_usage),
                 borderColor: '#4da3ff',
                 backgroundColor: 'rgba(77, 163, 255, 0.12)',
                 yAxisID: 'cpu',
@@ -380,7 +405,7 @@
         if (hasPlayers) {
             datasets.push({
                 label: 'Online players',
-                data: data.points.map((p) => p.players_online),
+                data: points.map((p) => p.players_online),
                 borderColor: '#ff9f43',
                 backgroundColor: 'rgba(255, 159, 67, 0.12)',
                 yAxisID: 'players',
@@ -400,7 +425,7 @@
         if (hasCalls) {
             datasets.push({
                 label: 'Calls',
-                data: data.points.map((p) => p.calls),
+                data: points.map((p) => p.calls),
                 borderColor: '#54d390',
                 backgroundColor: 'rgba(84, 211, 144, 0.12)',
                 yAxisID: 'calls',
