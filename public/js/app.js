@@ -2,7 +2,13 @@
     'use strict';
 
     const API_BASE = '/api.php';
-    const RANGE_SECONDS = { hour: 3600, day: 86400, '7d': 604800 };
+    const RANGE_SECONDS = {
+        hour: 3600,
+        day: 86400,
+        '7d': 604800,
+        '14d': 1209600,
+        '30d': 2592000,
+    };
 
     const state = {
         sources: [],
@@ -302,6 +308,7 @@
             { labels, datasets },
             scales,
         );
+        scheduleChartResize();
     }
 
     function renderFunctionList(functions) {
@@ -330,8 +337,9 @@
                 const token = ++state.loadToken;
                 setLoading(true);
                 try {
-                    await loadFunctionSeries(token);
                     els.functionSection.classList.remove('hidden');
+                    await loadFunctionSeries(token);
+                    scheduleChartResize();
                 } catch (err) {
                     setError(err.message || 'Failed to load function chart.');
                 } finally {
@@ -449,6 +457,18 @@
             { labels, datasets },
             scales,
         );
+        scheduleChartResize();
+    }
+
+    function scheduleChartResize() {
+        requestAnimationFrame(() => {
+            if (overviewChart) {
+                overviewChart.resize();
+            }
+            if (functionChart) {
+                functionChart.resize();
+            }
+        });
     }
 
     function createOrUpdateChart(existing, canvasId, data, scales) {

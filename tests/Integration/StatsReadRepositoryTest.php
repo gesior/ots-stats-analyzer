@@ -234,6 +234,19 @@ final class StatsReadRepositoryTest extends TestCase
         $this->repository->functionSeries(999999, $this->latestEnd, 'hour');
     }
 
+    public function testOverviewRebucketingIncreasesWithRangeDuration(): void
+    {
+        $hour = $this->repository->overview('dispatcher', $this->latestEnd, 'hour');
+        $sevenDay = $this->repository->overview('dispatcher', $this->latestEnd, '7d');
+        $fourteenDay = $this->repository->overview('dispatcher', $this->latestEnd, '14d');
+        $thirtyDay = $this->repository->overview('dispatcher', $this->latestEnd, '30d');
+
+        $this->assertGreaterThan($hour['bucket_seconds'], $sevenDay['bucket_seconds']);
+        $this->assertGreaterThan($sevenDay['bucket_seconds'], $fourteenDay['bucket_seconds']);
+        $this->assertGreaterThan($fourteenDay['bucket_seconds'], $thirtyDay['bucket_seconds']);
+        $this->assertLessThanOrEqual(1500, count($thirtyDay['points']));
+    }
+
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {

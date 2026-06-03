@@ -2,7 +2,13 @@
     'use strict';
 
     const API_BASE = '/api.php';
-    const RANGE_SECONDS = { hour: 3600, day: 86400, '7d': 604800 };
+    const RANGE_SECONDS = {
+        hour: 3600,
+        day: 86400,
+        '7d': 604800,
+        '14d': 1209600,
+        '30d': 2592000,
+    };
 
     const state = {
         sources: [],
@@ -30,7 +36,6 @@
         sortSelect: document.getElementById('sort-select'),
         loading: document.getElementById('loading'),
         error: document.getElementById('error'),
-        summaryCards: document.getElementById('summary-cards'),
         overviewTitle: document.getElementById('overview-title'),
         functionList: document.getElementById('function-list'),
         functionSection: document.getElementById('function-section'),
@@ -158,7 +163,6 @@
                 return;
             }
 
-            renderSummaryCards(overview.comparison);
             renderOverview(overview);
             renderFunctionList(topFunctions.functions || []);
 
@@ -235,51 +239,6 @@
         return params;
     }
 
-    function renderSummaryCards(comparison) {
-        if (!comparison) {
-            els.summaryCards.classList.add('hidden');
-            els.summaryCards.innerHTML = '';
-            return;
-        }
-
-        const current = comparison.current || {};
-        const delta = comparison.delta || {};
-
-        els.summaryCards.innerHTML = [
-            buildSummaryCard('Events', current.event_count, delta.event_count_pct, false),
-            buildSummaryCard('Max time', formatMs(current.max_execution_ms), delta.max_execution_ms_pct, true),
-            buildSummaryCard('Avg time', formatMs(current.avg_execution_ms), delta.avg_execution_ms_pct, true),
-            buildSummaryCard('Unique functions', current.unique_functions, null, false),
-        ].join('');
-        els.summaryCards.classList.remove('hidden');
-    }
-
-    function buildSummaryCard(label, value, deltaPct, lowerIsBetter) {
-        let deltaHtml = '';
-        if (deltaPct !== null && deltaPct !== undefined) {
-            const cls = deltaClass(deltaPct, lowerIsBetter);
-            const sign = deltaPct > 0 ? '+' : '';
-            deltaHtml = `<div class="delta ${cls}">${sign}${deltaPct.toFixed(1)}% vs previous period</div>`;
-        }
-
-        return (
-            `<div class="summary-card">` +
-            `<div class="label">${escapeHtml(label)}</div>` +
-            `<div class="value">${escapeHtml(String(value ?? '—'))}</div>` +
-            deltaHtml +
-            `</div>`
-        );
-    }
-
-    function deltaClass(deltaPct, lowerIsBetter) {
-        if (Math.abs(deltaPct) < 0.05) {
-            return 'neutral';
-        }
-
-        const improved = lowerIsBetter ? deltaPct < 0 : deltaPct > 0;
-        return improved ? 'positive' : 'negative';
-    }
-
     function renderOverview(data) {
         lastOverviewData = data;
         els.overviewTitle.textContent = `Lag activity (${data.source})`;
@@ -348,6 +307,7 @@
                 },
             },
         );
+        scheduleChartResize();
     }
 
     function renderFunctionList(functions) {
@@ -376,8 +336,9 @@
                 const token = ++state.loadToken;
                 setLoading(true);
                 try {
-                    await loadFunctionSeries(token);
                     els.functionSection.classList.remove('hidden');
+                    await loadFunctionSeries(token);
+                    scheduleChartResize();
                 } catch (err) {
                     setError(err.message || 'Failed to load function chart.');
                 } finally {
@@ -495,6 +456,18 @@
                 },
             },
         );
+        scheduleChartResize();
+    }
+
+    function scheduleChartResize() {
+        requestAnimationFrame(() => {
+            if (overviewChart) {
+                overviewChart.resize();
+            }
+            if (functionChart) {
+                functionChart.resize();
+            }
+        });
     }
 
     function createOrUpdateChart(existing, canvasId, data, scales) {
@@ -567,13 +540,6 @@
         }
         els.error.textContent = message;
         els.error.classList.remove('hidden');
-    }
-
-    function formatMs(value) {
-        if (value === null || value === undefined) {
-            return '—';
-        }
-        return `${Math.round(value)} ms`;
     }
 
     function formatLabel(unix) {
